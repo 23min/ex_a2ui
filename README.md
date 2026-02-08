@@ -158,6 +158,13 @@ jason ~> 1.4
 
 That's it. The WebSocket server (v0.1.0) will add `bandit`, `websock`, and `plug`.
 
+## Development
+
+```bash
+git config core.hooksPath .githooks   # one-time setup
+mix ci                                # format + compile + test
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

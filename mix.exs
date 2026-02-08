@@ -14,11 +14,13 @@ defmodule A2UI.MixProject do
       package: package(),
       docs: docs(),
       name: "A2UI",
-      description: "Lightweight Elixir library for Google's A2UI protocol. " <>
-        "Serve interactive, agent-driven UI surfaces from any BEAM app " <>
-        "via declarative JSON over WebSocket — no Phoenix or LiveView required.",
+      description:
+        "Lightweight Elixir library for Google's A2UI protocol. " <>
+          "Serve interactive, agent-driven UI surfaces from any BEAM app " <>
+          "via declarative JSON over WebSocket — no Phoenix or LiveView required.",
       source_url: @source_url,
-      homepage_url: @source_url
+      homepage_url: @source_url,
+      aliases: aliases()
     ]
   end
 
@@ -43,6 +45,12 @@ defmodule A2UI.MixProject do
         "A2UI Spec" => "https://a2ui.org/"
       },
       maintainers: ["23min"]
+    ]
+  end
+
+  defp aliases do
+    [
+      ci: ["format --check-formatted", "compile --warnings-as-errors", "test"]
     ]
   end
 

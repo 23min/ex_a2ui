@@ -5,11 +5,12 @@ defmodule A2UI.DecoderTest do
 
   describe "decode/1" do
     test "decodes a simple user action" do
-      json = Jason.encode!(%{
-        "userAction" => %{
-          "action" => %{"name" => "refresh"}
-        }
-      })
+      json =
+        Jason.encode!(%{
+          "userAction" => %{
+            "action" => %{"name" => "refresh"}
+          }
+        })
 
       assert {:ok, {:user_action, action}} = Decoder.decode(json)
       assert action.name == "refresh"
@@ -17,14 +18,15 @@ defmodule A2UI.DecoderTest do
     end
 
     test "decodes user action with context" do
-      json = Jason.encode!(%{
-        "userAction" => %{
-          "action" => %{
-            "name" => "select_item",
-            "context" => %{"item_id" => "42"}
+      json =
+        Jason.encode!(%{
+          "userAction" => %{
+            "action" => %{
+              "name" => "select_item",
+              "context" => %{"item_id" => "42"}
+            }
           }
-        }
-      })
+        })
 
       assert {:ok, {:user_action, action}} = Decoder.decode(json)
       assert action.name == "select_item"
