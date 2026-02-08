@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "anthropics.claude-code",
+    "github.copilot",
+    "openai.chatgpt-vscode",
+    "mhutchie.git-graph",
+    "bierner.github-markdown-preview"
+  ]
+}

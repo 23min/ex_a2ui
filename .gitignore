@@ -8,3 +8,4 @@ erl_crash.dump
 *.beam
 ex_a2ui-*.tar
 .elixir_ls/
+SESSION_CONTEXT.md
