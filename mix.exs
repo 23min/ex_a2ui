@@ -24,6 +24,12 @@ defmodule A2UI.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [ci: :test]
+    ]
+  end
+
   def application do
     [
       extra_applications: [:logger]
