@@ -2,45 +2,110 @@
 
 Lightweight Elixir library for Google's [A2UI](https://a2ui.org/) protocol. Serve interactive, agent-driven UI surfaces from any BEAM app via declarative JSON over WebSocket — no Phoenix or LiveView required.
 
-**Status:** Early development (v0.0.1). API will change. See [ROADMAP.md](ROADMAP.md) for the full plan.
+**Status:** v0.1.0 — WebSocket server is live. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
 **A2UI spec:** v0.8 (public preview)
+
+## Why Elixir for A2UI?
+
+A2UI is a protocol where servers produce declarative JSON describing UI, and clients render it natively. The BEAM VM is a natural fit:
+
+- **One process per connection** — each WebSocket client gets an isolated, lightweight process with its own state. No shared mutable state, millions of concurrent connections.
+- **Fault tolerance** — one client's surface crashes, others are unaffected. The supervisor restarts it.
+- **Real-time push** — broadcasting state changes to connected clients is what the BEAM was built for.
+- **AI agent UIs** — LLMs generate flat JSON component lists, Elixir manages the stateful conversation loop, clients render natively.
+
+## When to use this vs Phoenix LiveView
+
+| | Phoenix LiveView | ex_a2ui |
+|--|-----------------|---------|
+| Rendering | Server-rendered HTML diffs | Client-rendered native widgets from JSON |
+| Clients | Browser only | Browser, Flutter, Angular, React — any A2UI renderer |
+| Dependencies | ~12+ packages (full web framework) | ~4 packages (protocol library) |
+| AI/LLM friendly | No (HTML templates) | Yes (flat JSON designed for LLM generation) |
+| Maturity | Battle-tested, huge ecosystem | Early, A2UI spec is v0.8 preview |
+
+**Use LiveView** for full web applications. **Use ex_a2ui** for:
+
+- **AI agent interfaces** — an LLM generates interactive UI as structured JSON, not HTML
+- **Lightweight BEAM app UIs** — add a dashboard or config panel to an existing OTP app without pulling in Phoenix
+- **Cross-platform from one server** — same Elixir backend serves browser (Lit), mobile (Flutter), desktop (Angular)
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:ex_a2ui, "~> 0.0.1"}
+    {:ex_a2ui, "~> 0.1.0"}
   ]
 end
 ```
 
 ## Quick start
 
+Define a surface provider:
+
 ```elixir
-alias A2UI.Builder, as: UI
+defmodule MyApp.DashboardProvider do
+  @behaviour A2UI.SurfaceProvider
 
-# Build a surface
-surface =
-  UI.surface("my-dashboard")
-  |> UI.text("title", "System Status")
-  |> UI.text("health", bind: "/system/health")
-  |> UI.button("refresh", "Refresh", action: "refresh")
-  |> UI.card("main", children: ["title", "health", "refresh"])
-  |> UI.data("/system/health", "operational")
-  |> UI.root("main")
+  alias A2UI.Builder, as: UI
 
-# Encode to A2UI JSON messages
-messages = A2UI.Encoder.encode_surface(surface)
-# => ["{\"surfaceUpdate\":{...}}", "{\"dataModelUpdate\":{...}}", "{\"beginRendering\":{...}}"]
+  @impl true
+  def init(_opts), do: {:ok, %{count: 0}}
+
+  @impl true
+  def surface(state) do
+    UI.surface("dashboard")
+    |> UI.text("count", "Count: #{state.count}")
+    |> UI.button("inc", "Increment", action: "increment")
+    |> UI.card("main", children: ["count", "inc"])
+    |> UI.root("main")
+  end
+
+  @impl true
+  def handle_action(%A2UI.Action{name: "increment"}, state) do
+    new_state = %{state | count: state.count + 1}
+    {:reply, surface(new_state), new_state}
+  end
+
+  def handle_action(_action, state), do: {:noreply, state}
+end
+```
+
+Start the server:
+
+```elixir
+# In your supervision tree:
+children = [
+  {A2UI.Server, provider: MyApp.DashboardProvider, port: 4000}
+]
+```
+
+Open `http://localhost:4000` — the built-in debug renderer shows your surface and a message log.
+
+## Try the demo
+
+```bash
+git clone https://github.com/23min/ex_a2ui.git
+cd ex_a2ui
+mix deps.get
+mix run demo_server.exs
+# Open http://localhost:4000
 ```
 
 ## What is A2UI?
 
-A2UI (Agent-to-User Interface) is a protocol where AI agents generate interactive UI as declarative JSON. Instead of returning text or HTML, an agent describes UI components (buttons, cards, text fields) and the client renders them natively. User interactions flow back to the agent, creating a bidirectional exploration loop.
+A2UI (Agent-to-User Interface) is a Google protocol where AI agents generate interactive UI as declarative JSON. Instead of returning text or HTML, an agent describes UI components (buttons, cards, text fields) and the client renders them natively. User interactions flow back to the agent, creating a bidirectional loop.
 
-This library provides the Elixir server-side implementation: types, encoding, and (soon) a WebSocket server.
+```
+Elixir app (server)          Browser/Mobile (client)
+─────────────────           ─────────────────────
+Build Surface structs  ──→  Receive JSON
+Encode to A2UI JSON    ──→  Render native widgets
+                       ←──  Send userAction JSON
+Decode, update state   ──→  Receive updated surface
+```
 
 ## API layers
 
@@ -103,20 +168,7 @@ UI.text(surface, "name", bind: "/user/name")
 |> UI.data("/user/name", "Alice")
 ```
 
-When the data model updates, bound components update automatically (once the WebSocket server is implemented in v0.1.0).
-
-## Try it
-
-A runnable demo is included that builds a multi-component dashboard surface and pretty-prints the A2UI JSON output:
-
-```bash
-git clone https://github.com/23min/ex_a2ui.git
-cd ex_a2ui
-mix deps.get
-mix run demo.exs
-```
-
-This builds a 14-component surface (text, buttons, checkbox, layout containers, card) with data bindings, encodes it to the three A2UI message types (`surfaceUpdate`, `dataModelUpdate`, `beginRendering`), and demonstrates decoding an incoming `userAction`. Run `mix test` to verify the full suite (43 tests).
+When the data model updates, bound components update automatically.
 
 ## Project structure
 
@@ -131,38 +183,26 @@ lib/
     encoder.ex             # Elixir structs → A2UI JSON wire format
     decoder.ex             # Incoming userAction JSON → Elixir structs
     builder.ex             # Pipe-friendly convenience API
-test/
-  a2ui/
-    builder_test.exs       # Builder API tests
-    component_test.exs     # Component type catalog tests
-    encoder_test.exs       # JSON output validation
-    decoder_test.exs       # Incoming message parsing
-demo.exs                   # Runnable demo (mix run demo.exs)
-ROADMAP.md                 # Architecture, rationale, development plan
+    surface_provider.ex    # Behaviour for defining surfaces and handling actions
+    socket.ex              # WebSock handler (A2UI message flow)
+    endpoint.ex            # Plug endpoint (HTTP + WebSocket routing)
+    server.ex              # OTP supervision tree entry point
+priv/
+  static/
+    index.html             # Built-in debug renderer page
 ```
-
-## Current scope (v0.0.1)
-
-- Core structs: `Component`, `Surface`, `BoundValue`, `Action`
-- `Encoder` — structs → A2UI JSON messages
-- `Decoder` — incoming `userAction` JSON → structs
-- `Builder` — pipe-friendly surface construction
-
-**Not yet implemented:** WebSocket server, static file serving, PubSub integration, custom component catalog. See [ROADMAP.md](ROADMAP.md).
 
 ## Dependencies
 
-```
-jason ~> 1.4
-```
+Runtime: `jason`, `bandit`, `websock_adapter`
 
-That's it. The WebSocket server (v0.1.0) will add `bandit`, `websock`, and `plug`.
+That's it. No Phoenix, no Ecto, no LiveView.
 
 ## Development
 
 ```bash
 git config core.hooksPath .githooks   # one-time setup
-mix ci                                # format + compile + test
+mix ci                                # format + compile + test (67 tests)
 ```
 
 ## License
