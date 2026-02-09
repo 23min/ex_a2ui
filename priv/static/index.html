@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A2UI</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --card: #0f3460;
+      --text: #e6e6e6;
+      --muted: #8888aa;
+      --accent: #e94560;
+      --success: #4ecca3;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    header h1 { font-size: 1.4rem; }
+    .status {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .status.connected { background: var(--success); color: #000; }
+    .status.disconnected { background: var(--accent); color: #fff; }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel h2 {
+      font-size: 0.9rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+
+    /* Surface rendering */
+    .a2ui-surface {
+      background: var(--card);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      min-height: 4rem;
+    }
+    .a2ui-surface-empty {
+      color: var(--muted);
+      font-style: italic;
+      text-align: center;
+      padding: 2rem;
+    }
+    .a2ui-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .a2ui-column { display: flex; flex-direction: column; gap: 0.5rem; }
+    .a2ui-card {
+      background: var(--surface);
+      border-radius: 0.4rem;
+      padding: 1rem;
+    }
+    .a2ui-card-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .a2ui-text { font-size: 1rem; line-height: 1.5; }
+    .a2ui-button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.45rem 1rem;
+      border-radius: 0.3rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: opacity 0.15s;
+    }
+    .a2ui-button:hover { opacity: 0.85; }
+    .a2ui-button:active { opacity: 0.7; }
+    .a2ui-checkbox { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+    .a2ui-checkbox input { cursor: pointer; }
+    .a2ui-divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      margin: 0.5rem 0;
+    }
+    .a2ui-unknown {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+    }
+
+    /* Message log */
+    #messages {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .message {
+      background: var(--surface);
+      border-radius: 0.4rem;
+      padding: 0.6rem 0.8rem;
+      border-left: 3px solid var(--accent);
+      font-size: 0.8rem;
+    }
+    .message.outgoing { border-left-color: var(--success); }
+    .message-type {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+    .message.outgoing .message-type { color: var(--success); }
+    .message pre {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.4;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>A2UI</h1>
+    <div id="status" class="status disconnected">Disconnected</div>
+  </header>
+  <div class="layout">
+    <div class="panel">
+      <h2>Surface</h2>
+      <div id="surface-container" class="a2ui-surface">
+        <div class="a2ui-surface-empty">Connecting&hellip;</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Messages</h2>
+      <div id="messages"></div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const statusEl = document.getElementById('status');
+      const messagesEl = document.getElementById('messages');
+      const surfaceEl = document.getElementById('surface-container');
+
+      let components = {};
+      let dataModel = {};
+      let rootComponentId = null;
+      let surfaceId = null;
+      let ws;
+
+      function connect() {
+        const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          statusEl.textContent = 'Connected';
+          statusEl.className = 'status connected';
+        };
+
+        ws.onclose = (e) => {
+          statusEl.textContent = 'Disconnected';
+          statusEl.className = 'status disconnected';
+          setTimeout(connect, 2000);
+        };
+
+        ws.onerror = () => {};
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            const type = Object.keys(msg)[0];
+            logMessage(type, msg[type]);
+            handleMessage(type, msg[type]);
+          } catch (e) {
+            logMessage('error', { raw: event.data, error: e.message });
+          }
+        };
+      }
+
+      function handleMessage(type, payload) {
+        switch (type) {
+          case 'surfaceUpdate':
+            surfaceId = payload.surfaceId;
+            (payload.components || []).forEach(c => { components[c.id] = c; });
+            renderSurface();
+            break;
+          case 'dataModelUpdate':
+            Object.assign(dataModel, payload.data || {});
+            renderSurface();
+            break;
+          case 'beginRendering':
+            rootComponentId = payload.rootComponentId;
+            renderSurface();
+            break;
+          case 'deleteSurface':
+            components = {};
+            dataModel = {};
+            rootComponentId = null;
+            surfaceEl.innerHTML = '<div class="a2ui-surface-empty">Surface deleted</div>';
+            break;
+        }
+      }
+
+      function renderSurface() {
+        if (!rootComponentId || !components[rootComponentId]) {
+          surfaceEl.innerHTML = '<div class="a2ui-surface-empty">Waiting for surface&hellip;</div>';
+          return;
+        }
+        surfaceEl.innerHTML = '';
+        renderComponent(surfaceEl, rootComponentId);
+      }
+
+      function renderComponent(parent, id) {
+        const comp = components[id];
+        if (!comp) return;
+        const [typeName, props] = Object.entries(comp.component)[0];
+
+        switch (typeName) {
+          case 'Text': {
+            const el = document.createElement('div');
+            el.className = 'a2ui-text';
+            el.textContent = resolveValue(props.text);
+            parent.appendChild(el);
+            break;
+          }
+          case 'Button': {
+            const btn = document.createElement('button');
+            btn.className = 'a2ui-button';
+            btn.textContent = resolveValue(props.label);
+            if (props.action) {
+              btn.onclick = () => sendAction(props.action.name, props.action.context);
+            }
+            parent.appendChild(btn);
+            break;
+          }
+          case 'CheckBox': {
+            const label = document.createElement('label');
+            label.className = 'a2ui-checkbox';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            if (props.checked) input.checked = resolveValue(props.checked) === 'true';
+            if (props.action) {
+              input.onchange = () => sendAction(props.action.name, props.action.context);
+            }
+            label.appendChild(input);
+            if (props.label) {
+              const span = document.createElement('span');
+              span.textContent = resolveValue(props.label);
+              label.appendChild(span);
+            }
+            parent.appendChild(label);
+            break;
+          }
+          case 'Card': {
+            const card = document.createElement('div');
+            card.className = 'a2ui-card';
+            if (props.title) {
+              const title = document.createElement('div');
+              title.className = 'a2ui-card-title';
+              title.textContent = resolveValue(props.title);
+              card.appendChild(title);
+            }
+            const body = document.createElement('div');
+            body.className = 'a2ui-column';
+            (props.children || []).forEach(childId => renderComponent(body, childId));
+            card.appendChild(body);
+            parent.appendChild(card);
+            break;
+          }
+          case 'Row': {
+            const row = document.createElement('div');
+            row.className = 'a2ui-row';
+            (props.children || []).forEach(childId => renderComponent(row, childId));
+            parent.appendChild(row);
+            break;
+          }
+          case 'Column': {
+            const col = document.createElement('div');
+            col.className = 'a2ui-column';
+            (props.children || []).forEach(childId => renderComponent(col, childId));
+            parent.appendChild(col);
+            break;
+          }
+          case 'Divider': {
+            const hr = document.createElement('hr');
+            hr.className = 'a2ui-divider';
+            parent.appendChild(hr);
+            break;
+          }
+          default: {
+            const el = document.createElement('div');
+            el.className = 'a2ui-unknown';
+            el.textContent = '[' + typeName + '] ' + JSON.stringify(props, null, 2);
+            parent.appendChild(el);
+          }
+        }
+      }
+
+      function resolveValue(boundValue) {
+        if (!boundValue) return '';
+        if (boundValue.path && dataModel[boundValue.path] !== undefined) {
+          return String(dataModel[boundValue.path]);
+        }
+        return boundValue.literalString || '';
+      }
+
+      function sendAction(name, context) {
+        const msg = { userAction: { action: { name } } };
+        if (context) msg.userAction.action.context = context;
+        const json = JSON.stringify(msg);
+        ws.send(json);
+        logMessage('userAction', { name, context }, true);
+      }
+
+      function logMessage(type, data, outgoing) {
+        const div = document.createElement('div');
+        div.className = 'message' + (outgoing ? ' outgoing' : '');
+        const typeEl = document.createElement('div');
+        typeEl.className = 'message-type';
+        typeEl.textContent = type;
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(data, null, 2);
+        div.appendChild(typeEl);
+        div.appendChild(pre);
+        messagesEl.prepend(div);
+        while (messagesEl.children.length > 50) messagesEl.removeChild(messagesEl.lastChild);
+      }
+
+      connect();
+    })();
+  </script>
+</body>
+</html>
