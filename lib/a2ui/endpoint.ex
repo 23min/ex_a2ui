@@ -1,0 +1,64 @@
+defmodule A2UI.Endpoint do
+  @moduledoc """
+  Plug endpoint for A2UI HTTP and WebSocket connections.
+
+  Routes:
+  - `GET /ws` — WebSocket upgrade (A2UI protocol)
+  - `GET /` — serves the default A2UI renderer page
+  - Static assets from `priv/static/`
+
+  This module is used internally by `A2UI.Server`. Applications
+  do not need to interact with it directly.
+  """
+
+  @behaviour Plug
+
+  import Plug.Conn
+
+  @impl Plug
+  def init(opts) do
+    provider = Keyword.fetch!(opts, :provider)
+    provider_opts = Keyword.get(opts, :provider_opts, %{})
+
+    static_opts =
+      Plug.Static.init(
+        at: "/",
+        from: {:ex_a2ui, "priv/static"}
+      )
+
+    %{
+      provider: provider,
+      provider_opts: provider_opts,
+      static_opts: static_opts
+    }
+  end
+
+  @impl Plug
+  def call(%{path_info: ["ws"]} = conn, config) do
+    conn
+    |> WebSockAdapter.upgrade(
+      A2UI.Socket,
+      %{provider: config.provider, opts: config.provider_opts},
+      timeout: 60_000
+    )
+    |> halt()
+  end
+
+  def call(%{path_info: []} = conn, _config) do
+    index = Application.app_dir(:ex_a2ui, "priv/static/index.html")
+
+    conn
+    |> put_resp_content_type("text/html")
+    |> send_file(200, index)
+  end
+
+  def call(conn, config) do
+    conn = Plug.Static.call(conn, config.static_opts)
+
+    if conn.halted do
+      conn
+    else
+      send_resp(conn, 404, "Not Found")
+    end
+  end
+end

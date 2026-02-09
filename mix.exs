@@ -1,7 +1,7 @@
 defmodule A2UI.MixProject do
   use Mix.Project
 
-  @version "0.0.1"
+  @version "0.1.0"
   @source_url "https://github.com/23min/ex_a2ui"
 
   def project do
@@ -39,7 +39,10 @@ defmodule A2UI.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:bandit, "~> 1.0"},
+      {:websock_adapter, "~> 0.5"},
+      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:gun, "~> 2.1", only: :test}
     ]
   end
 
