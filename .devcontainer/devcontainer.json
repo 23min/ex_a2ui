@@ -1,6 +1,6 @@
 {
   "name": "ex_a2ui",
-  "image": "hexpm/elixir:1.17.3-erlang-27.2-debian-bookworm-20241202",
+  "image": "hexpm/elixir:1.19.5-erlang-28.3.1-debian-bookworm-20260202",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
