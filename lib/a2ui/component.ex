@@ -25,7 +25,10 @@ defmodule A2UI.Component do
   - `:checkbox` — boolean toggle
   - `:date_time_input` — date/time picker
   - `:slider` — range slider
-  - `:multiple_choice` — selection from options
+  - `:choice_picker` — selection from options
+
+  Display (continued):
+  - `:audio_player` — audio playback
 
   Container:
   - `:card` — grouped content
@@ -64,7 +67,8 @@ defmodule A2UI.Component do
           | :checkbox
           | :date_time_input
           | :slider
-          | :multiple_choice
+          | :choice_picker
+          | :audio_player
           | :card
           | :tabs
           | :modal
@@ -82,8 +86,8 @@ defmodule A2UI.Component do
   @standard_types ~w(
     row column list
     text image icon video divider
-    button text_field checkbox date_time_input slider multiple_choice
-    card tabs modal
+    button text_field checkbox date_time_input slider choice_picker
+    audio_player card tabs modal
   )a
 
   @doc "Returns the list of standard A2UI component types."

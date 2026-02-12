@@ -18,7 +18,7 @@ defmodule A2UI do
         |> UI.card("main", children: ["title", "health", "check"])
 
       # Encode to A2UI JSON messages
-      A2UI.Encoder.surface_update(surface)
+      A2UI.Encoder.update_components(surface)
 
   ## API layers
 
@@ -28,10 +28,10 @@ defmodule A2UI do
 
   ## A2UI spec version
 
-  This library targets A2UI v0.8 (public preview).
+  This library targets A2UI v0.9.
   """
 
-  @a2ui_spec_version "0.8"
+  @a2ui_spec_version "v0.9"
 
   @doc "Returns the A2UI specification version this library targets."
   @spec spec_version() :: String.t()

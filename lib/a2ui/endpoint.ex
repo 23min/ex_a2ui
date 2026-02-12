@@ -19,6 +19,7 @@ defmodule A2UI.Endpoint do
   def init(opts) do
     provider = Keyword.fetch!(opts, :provider)
     provider_opts = Keyword.get(opts, :provider_opts, %{})
+    registry = Keyword.get(opts, :registry)
 
     static_opts =
       Plug.Static.init(
@@ -29,6 +30,7 @@ defmodule A2UI.Endpoint do
     %{
       provider: provider,
       provider_opts: provider_opts,
+      registry: registry,
       static_opts: static_opts
     }
   end
@@ -38,7 +40,7 @@ defmodule A2UI.Endpoint do
     conn
     |> WebSockAdapter.upgrade(
       A2UI.Socket,
-      %{provider: config.provider, opts: config.provider_opts},
+      %{provider: config.provider, opts: config.provider_opts, registry: config.registry},
       timeout: 60_000
     )
     |> halt()

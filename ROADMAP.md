@@ -42,15 +42,15 @@ A2UI defines *what* UI to render. AG-UI defines *how* to transport it. MCP defin
 
 ### Core concepts
 
-**Surface** — A canvas holding a flat list of components. Each surface has an ID and can be independently created, updated, or deleted.
+**Surface** — A canvas holding a flat list of components. Each surface has an ID, a catalog reference, and can be independently created, updated, or deleted.
 
 **Component** — A UI element (Text, Button, Card, etc.) with a unique ID and type-specific properties. Components are organized as a flat adjacency list, not a nested tree. Parent-child relationships are expressed via `children` property references.
 
-**BoundValue** — A value that can be a literal, a data model path (JSON Pointer), or both. Enables reactive binding: when the data model changes, bound components update automatically.
+**Dynamic Values** — Property values that can be literals, data model bindings (JSON Pointer paths), or function calls. Enables reactive binding: when the data model changes, bound components update automatically.
 
-**Action** — A user interaction event (button click, form submit) that flows from the client back to the server, optionally carrying context resolved from the data model.
+**Action** — Either a server event (flows back to the server with context) or a local function call (executed on the client). Triggered by user interaction with actionable components.
 
-**DataModel** — Key-value state store (JSON Pointer paths → values) that components bind to. Updates to the data model trigger reactive UI updates without regenerating components.
+**DataModel** — JSON state that components bind to via JSON Pointer paths. Updates to the data model trigger reactive UI updates without regenerating components.
 
 ### Why flat component lists?
 
@@ -64,31 +64,25 @@ A2UI uses flat adjacency lists instead of nested trees for three reasons:
 
 ```
 lib/a2ui/
-  component.ex     — Component struct + standard type catalog
-  surface.ex       — Surface struct + manipulation functions
-  bound_value.ex   — Data binding (literal, path, or both)
-  action.ex        — User action struct
-  encoder.ex       — Elixir structs → A2UI JSON wire format
-  decoder.ex       — Incoming JSON (userAction) → Elixir structs
-  builder.ex       — Pipe-friendly convenience API for building surfaces
-```
-
-Future modules (not yet implemented):
-
-```
-lib/a2ui/
-  server.ex        — Bandit HTTP + WebSocket endpoint
-  socket.ex        — WebSock handler for A2UI message flow
-  static.ex        — Plug for serving client-side renderer assets
-  catalog.ex       — Custom component type registration
-  data_model.ex    — JSON Pointer resolution and data store
+  component.ex         — Component struct + 18 standard types
+  surface.ex           — Surface struct (flat component list + data model)
+  bound_value.ex       — Data binding (literal, path, or both)
+  action.ex            — User action struct
+  encoder.ex           — Elixir structs → A2UI JSON wire format
+  decoder.ex           — Incoming JSON → Elixir structs
+  builder.ex           — Pipe-friendly convenience API
+  server.ex            — Bandit HTTP + WebSocket endpoint, push API
+  socket.ex            — WebSock handler for A2UI message flow
+  endpoint.ex          — Plug endpoint (HTTP + WS routing)
+  surface_provider.ex  — Behaviour for defining surfaces
+  supervisor.ex        — OTP Supervisor (Registry + Bandit)
 ```
 
 ### API layers
 
 The library provides two layers. Users choose based on their needs:
 
-**Layer 1: Structs** — Direct 1:1 mapping to the A2UI JSON spec. Full control, no magic. Code generators and advanced use cases.
+**Layer 1: Structs** — Direct 1:1 mapping to the A2UI JSON spec. Full control, no magic.
 
 ```elixir
 %A2UI.Surface{
@@ -119,95 +113,123 @@ UI.surface("status")
 
 Both layers produce the same structs. The encoder doesn't care which layer created them.
 
-A **DSL layer** (macro-based) is intentionally deferred. The Elixir community generally prefers explicit functions over macros, and the builder API is sufficient. A DSL will only be added if real-world usage demonstrates clear demand.
+## Spec Target
 
-## Dependencies
+**A2UI v0.9** — the latest closed specification version.
 
-### Current (v0.0.x — protocol types + encoder)
+See `docs/research/spec-compliance.md` in the repository for the full gap analysis against the spec and comparison with the [a2ui-blazor](https://github.com/23min/a2ui-blazor) reference implementation.
 
-```elixir
-{:jason, "~> 1.4"}  # JSON encoding/decoding
-```
+## Development Plan
 
-### Planned (v0.1.0 — server)
+### v0.0.1 — Protocol types and encoder ✅
 
-```elixir
-{:bandit, "~> 1.0"}   # HTTP server (pure Elixir, by the creator of Plug)
-{:websock, "~> 0.5"}  # WebSocket behavior
-{:plug, "~> 1.15"}    # Static file serving
-{:jason, "~> 1.4"}    # JSON encoding/decoding
-```
+Core structs, encoder, decoder, builder. 43 tests.
 
-No Phoenix. No Ecto. No LiveView.
+### v0.1.0 — WebSocket server ✅
 
-### Optional integrations
+Bandit-based HTTP + WebSocket endpoint. SurfaceProvider behaviour. Debug renderer. Integration tests. 67 tests.
 
-- **phoenix_pubsub** — For broadcasting state changes to connected A2UI clients. Works standalone (does not require Phoenix).
-- Custom renderer JS — Cytoscape.js, D3.js, or other client-side libraries for domain-specific visualization components.
+### v0.2.0 — Push updates ✅
 
-## Development plan
+Server-initiated push (push_data, push_surface, broadcast, broadcast_all). OTP Supervisor with Registry. Optional handle_info/2 callback. 95 tests.
 
-### v0.0.1 — Protocol types and encoder (current)
+### v0.3.0 — v0.9 Wire Format Migration ✅
 
-Claim the namespace. Establish the foundation.
+v0.9-compliant JSON wire format. Breaking changes to encoder/decoder output. 100 tests.
 
-- Core structs: `Component`, `Surface`, `BoundValue`, `Action`
-- `Encoder` — Elixir structs → valid A2UI JSON messages
-- `Decoder` — incoming `userAction` JSON → Elixir structs
-- `Builder` — pipe-friendly convenience API
-- Tests validating JSON output against A2UI spec
-- Published to Hex
+**Message renames:** `surfaceUpdate` → `updateComponents`, `dataModelUpdate` → `updateDataModel`, `beginRendering` → `createSurface`, `userAction` → `action` (with event envelope). All messages include `"version": "v0.9"` and are wrapped in JSON arrays.
 
-**Scope boundary:** No server, no WebSocket, no HTML. Pure data types and encoding.
+**Component format change:** Properties moved to top level (flat format), literal values are plain values (no wrapper objects), component type is a string discriminator.
 
-### v0.1.0 — WebSocket server
+**Struct/type changes:** Added `:audio_player`, renamed `:multiple_choice` → `:choice_picker` (18 standard types). Surface gained `catalog_id` field. `encode_surface/1` returns single JSON string (was list of strings).
 
-Make it usable: serve A2UI surfaces over WebSocket from any BEAM app.
+### v0.4.0 — v0.9 Data Features
 
-- `A2UI.Server` — Bandit-based HTTP + WebSocket endpoint, embeddable in any OTP supervision tree
-- `A2UI.Socket` — WebSock handler implementing the A2UI message flow
-- `A2UI.Static` — Plug for serving a minimal HTML page with Google's Lit A2UI renderer
-- `A2UI.SurfaceProvider` behaviour — applications implement this to define surfaces and handle actions
-- Default renderer page in `priv/static/`
-- Integration tests: start server, connect WebSocket, render surface, trigger action, receive response
+**FunctionCall:**
+- New struct for computed values: `{"call": "fn", "args": {...}, "returnType": "string"}`
+- Server emits FunctionCall in component properties; clients evaluate them
+- Builder helpers for common patterns (e.g., `UI.format_string(...)`, `UI.open_url(...)`)
 
-**Scope boundary:** Standard A2UI components only. No custom component registration yet.
+**Template ChildList:**
+- Dynamic children from data arrays: `{"path": "/items", "componentId": "template"}`
+- Enables data-driven lists without manually creating per-item components
 
-### v0.2.0 — Real-time updates and custom components
+**CheckRule / validation:**
+- `checks` array on input components: `{"condition": <DynamicBoolean>, "message": "..."}`
+- Builder helpers: `UI.text_field("name", "Name", checks: [required(), max_length(50)])`
 
-Make it reactive and extensible.
+**updateDataModel path operations:**
+- Path-level upsert: set value at a specific JSON Pointer path
+- Path-level delete: omit `value` to delete at path
+- Replaces current bulk data map approach
 
-- `push_data/3` and `push_surface/2` for pushing updates to connected clients
-- `A2UI.Catalog` — custom component type registration
-- PubSub integration (optional, for broadcasting state changes)
-- `A2UI.DataModel` — JSON Pointer resolution for data binding
-- Streaming support (incremental surface building)
-- Documentation for building custom client-side components (Web Components)
+**Theme:**
+- `primaryColor`, `iconUrl`, `agentDisplayName` on createSurface
+- Surface struct gains theme fields
 
-**Scope boundary:** Single-surface updates. No multi-surface routing or navigation.
+**sendDataModel flag:**
+- On createSurface, tells client to send full data model back with actions
 
-### v0.3.0 — Production hardening
+### v0.5.0 — Protocol Completeness & Transport Options
 
-Based on real-world usage feedback.
+**Client error messages:**
+- Decode `error` messages from client (`VALIDATION_FAILED` with path, generic errors)
+- Route to provider via new callback or handle_action extension
 
-- Multi-surface management (surface switching, lifecycle)
+**Standard functions (14):**
+- Constants/types for: required, regex, length, numeric, email, formatString, formatNumber, formatCurrency, formatDate, pluralize, and, or, not, openUrl
+- Builder helpers for constructing FunctionCall values with the right args/returnType
+- No evaluation engine (that's the client's job)
+
+**Transport options:**
+- SSE (Server-Sent Events) adapter — for one-way push scenarios (dashboards, monitoring)
+- HTTP streaming adapter — for request-response with streamed UI
+- WebSocket remains the default for bidirectional communication
+- Encoder is already transport-independent; adapters handle framing
+
+**Custom component registration:**
+- `A2UI.Catalog` — register custom component types with metadata
+- Wire format for catalog exchange
+
+### v0.6.0 — Demo Parity & Production Hardening
+
+**Demo agents** (parity with a2ui-blazor's 5 agents):
+- Component gallery — showcase all 18 standard component types
+- Data binding demo — reactive updates, formatString interpolation
+- Form + validation demo — input components with CheckRule
+- Push/streaming demo — timer-based updates, live data
+- Custom component demo
+
+**Production hardening:**
 - Connection management (reconnection, state recovery)
-- Client capability negotiation (`a2uiClientCapabilities`)
+- Multi-surface management (surface switching, lifecycle)
 - Error handling and graceful degradation
 - Performance optimization for large surfaces
 - Telemetry integration for observability
 
-### Future considerations
+### Future Considerations
 
-These are directions the library *might* go, depending on community needs:
-
-- **AG-UI transport integration** — Support AG-UI as an alternative to raw WebSocket
-- **Server-Sent Events transport** — For one-way push scenarios (dashboards, monitors)
+- **AG-UI transport integration** — Support AG-UI as an alternative transport
+- **Capability negotiation** — Client declares supportedCatalogIds (deferred: need to research idiomatic Elixir patterns)
 - **Test helpers** — `A2UI.Test` module with assertion helpers for downstream applications
-- **Mix tasks** — `mix a2ui.vendor` to download and vendor client-side renderer JS for offline use
-- **LiveView bridge** — Optional adapter that lets LiveView applications render A2UI surfaces (using LiveView as transport instead of raw WebSocket). This would complement LiveView, not replace it.
+- **Mix tasks** — `mix a2ui.vendor` to download and vendor client-side renderer JS
+- **LiveView bridge** — Optional adapter that lets LiveView applications render A2UI surfaces
 
-## Design decisions and rationale
+## Dependencies
+
+### Current (v0.3.0)
+
+```elixir
+{:jason, "~> 1.4"}            # JSON encoding/decoding
+{:bandit, "~> 1.0"}           # HTTP server (pure Elixir)
+{:websock_adapter, "~> 0.5"}  # WebSocket upgrade adapter
+```
+
+Test-only: `{:gun, "~> 2.1"}`. Dev-only: `{:ex_doc, "~> 0.31"}`.
+
+No Phoenix. No Ecto. No LiveView.
+
+## Design Decisions
 
 ### Why Bandit over Cowboy?
 
@@ -216,8 +238,6 @@ Bandit is a pure Elixir HTTP server created by the maintainer of Plug. It's ligh
 ### Why not implement the client-side renderer?
 
 A2UI separates concerns: the server produces declarative JSON, the client renders it. Google's Lit renderer (open source, Web Components-based) handles the client side. Building our own renderer would duplicate effort and diverge from the spec. The library ships a minimal HTML page that loads the Lit renderer — this is the thin bridge between server and client.
-
-Custom domain-specific components (graph visualizations, code editors, etc.) are implemented as Web Components and registered in the client's component catalog. The library provides the registration mechanism, not the rendering.
 
 ### Why flat adjacency list, not nested component tree?
 
@@ -230,45 +250,12 @@ This is an A2UI spec decision, not ours. But it's a good one for BEAM applicatio
 
 ### Why two API layers (structs + builder) but not three (+ DSL)?
 
-The Elixir community has shifted toward explicit, functional APIs and away from heavy macro usage. The builder API provides the convenience of a DSL (pipe-friendly, concise) without the downsides (compile-time complexity, harder debugging, IDE confusion). If real-world usage demonstrates clear demand for a macro DSL, it can be added as an optional layer without changing the struct or builder APIs.
-
-### Why not support all A2UI features in v0.0.1?
-
-The A2UI spec is v0.8 (public preview). It will change. By starting with the stable core (components, surfaces, encoding) and deferring unstable features (catalog negotiation, streaming, multi-surface lifecycle), we reduce the surface area exposed to spec changes. Each version adds features that are validated by real usage.
-
-## A2UI spec compatibility
-
-This library targets **A2UI v0.8** (public preview, January 2026).
-
-The A2UI spec is evolving. Our versioning strategy:
-
-- **Patch versions** (0.0.x) — bug fixes, no spec changes
-- **Minor versions** (0.x.0) — new features, non-breaking spec updates
-- **Major versions** (x.0.0) — breaking spec changes (e.g., A2UI v0.9 → v1.0)
-
-The current spec version is exposed via `A2UI.spec_version/0`.
-
-## Risks and mitigations
-
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| A2UI spec instability (v0.8) | Medium | Isolate spec mapping in encoder/decoder; core concepts (components, surfaces, actions) are stable |
-| Small initial audience | Low | Library is useful to its author first; community is a bonus |
-| API design wrong on first try | Medium | Ship early (0.0.x); iterate based on real usage before 1.0 |
-| Lit renderer CDN dependency | Low | Document self-hosting; add `mix a2ui.vendor` in v0.2+ |
-| Scope creep | Medium | Hard boundaries per version; reject features that belong in application code |
-| Maintenance burden | Medium | Keep scope minimal; 4 deps max; no framework ambitions |
-
-## Contributing
-
-This project is in early development. The API will change. Feedback on the builder API, encoder output, and struct design is welcome via GitHub issues.
+The Elixir community has shifted toward explicit, functional APIs and away from heavy macro usage. The builder API provides the convenience of a DSL (pipe-friendly, concise) without the downsides (compile-time complexity, harder debugging, IDE confusion). A DSL will only be added if real-world usage demonstrates clear demand.
 
 ## References
 
-- [A2UI specification](https://a2ui.org/)
-- [A2UI GitHub (Google)](https://github.com/google/A2UI)
-- [A2UI Renderer Development Guide](https://a2ui.org/guides/renderer-development/)
-- [A2UI Components & Structure](https://a2ui.org/concepts/components/)
-- [A2UI Agent UI Ecosystem](https://a2ui.org/introduction/agent-ui-ecosystem/)
+- [A2UI specification](https://github.com/google/A2UI/tree/main/specification)
+- [A2UI website](https://a2ui.org/)
+- [a2ui-blazor reference implementation](https://github.com/23min/a2ui-blazor)
 - [Bandit HTTP Server](https://github.com/mtrudel/bandit)
 - [WebSock](https://github.com/mtrudel/websock)

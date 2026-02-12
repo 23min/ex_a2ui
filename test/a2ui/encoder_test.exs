@@ -3,21 +3,29 @@ defmodule A2UI.EncoderTest do
 
   alias A2UI.{Encoder, Builder}
 
-  describe "surface_update/1" do
+  # Helper to decode array-wrapped messages and return the first message
+  defp decode_first(json) do
+    [msg | _] = Jason.decode!(json)
+    msg
+  end
+
+  describe "update_components/1" do
     test "encodes a surface with text component" do
       surface =
         Builder.surface("test")
         |> Builder.text("title", "Hello")
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      assert decoded["surfaceUpdate"]["surfaceId"] == "test"
-      assert length(decoded["surfaceUpdate"]["components"]) == 1
+      assert msg["version"] == "v0.9"
+      assert msg["updateComponents"]["surfaceId"] == "test"
+      assert length(msg["updateComponents"]["components"]) == 1
 
-      [comp] = decoded["surfaceUpdate"]["components"]
+      [comp] = msg["updateComponents"]["components"]
       assert comp["id"] == "title"
-      assert comp["component"]["Text"]["text"]["literalString"] == "Hello"
+      assert comp["component"] == "Text"
+      assert comp["text"] == "Hello"
     end
 
     test "encodes a surface with bound text" do
@@ -25,12 +33,12 @@ defmodule A2UI.EncoderTest do
         Builder.surface("test")
         |> Builder.text("health", bind: "/system/health")
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      [comp] = decoded["surfaceUpdate"]["components"]
-      assert comp["component"]["Text"]["text"]["path"] == "/system/health"
-      refute Map.has_key?(comp["component"]["Text"]["text"], "literalString")
+      [comp] = msg["updateComponents"]["components"]
+      assert comp["component"] == "Text"
+      assert comp["text"] == %{"path" => "/system/health"}
     end
 
     test "encodes a surface with button and action" do
@@ -38,12 +46,13 @@ defmodule A2UI.EncoderTest do
         Builder.surface("test")
         |> Builder.button("btn", "Click Me", action: "do_thing")
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      [comp] = decoded["surfaceUpdate"]["components"]
-      assert comp["component"]["Button"]["label"]["literalString"] == "Click Me"
-      assert comp["component"]["Button"]["action"]["name"] == "do_thing"
+      [comp] = msg["updateComponents"]["components"]
+      assert comp["component"] == "Button"
+      assert comp["label"] == "Click Me"
+      assert comp["action"] == %{"event" => %{"name" => "do_thing"}}
     end
 
     test "encodes card with children" do
@@ -52,14 +61,15 @@ defmodule A2UI.EncoderTest do
         |> Builder.text("t1", "Hello")
         |> Builder.card("c1", children: ["t1"])
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      components = decoded["surfaceUpdate"]["components"]
+      components = msg["updateComponents"]["components"]
       assert length(components) == 2
 
       card = Enum.find(components, &(&1["id"] == "c1"))
-      assert card["component"]["Card"]["children"] == ["t1"]
+      assert card["component"] == "Card"
+      assert card["children"] == ["t1"]
     end
 
     test "encodes custom component type" do
@@ -67,14 +77,14 @@ defmodule A2UI.EncoderTest do
         Builder.surface("test")
         |> Builder.custom(:graph, "my-graph", nodes: "[]", edges: "[]")
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      [comp] = decoded["surfaceUpdate"]["components"]
-      assert Map.has_key?(comp["component"], "graph")
+      [comp] = msg["updateComponents"]["components"]
+      assert comp["component"] == "graph"
     end
 
-    test "encodes bound value with both literal and path" do
+    test "encodes bound value with both literal and path (path wins in v0.9)" do
       bv = A2UI.BoundValue.bind("/health", "loading...")
 
       surface = %A2UI.Surface{
@@ -88,88 +98,112 @@ defmodule A2UI.EncoderTest do
         ]
       }
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      [comp] = decoded["surfaceUpdate"]["components"]
-      text_val = comp["component"]["Text"]["text"]
-      assert text_val["literalString"] == "loading..."
-      assert text_val["path"] == "/health"
+      [comp] = msg["updateComponents"]["components"]
+      # v0.9: when both are set, path takes precedence
+      assert comp["text"] == %{"path" => "/health"}
+    end
+
+    test "wraps output in JSON array" do
+      surface = Builder.surface("test") |> Builder.text("t", "hi")
+      json = Encoder.update_components(surface)
+      decoded = Jason.decode!(json)
+      assert is_list(decoded)
+      assert length(decoded) == 1
     end
   end
 
-  describe "data_model_update/2" do
+  describe "update_data_model/2" do
     test "encodes data model update" do
-      json = Encoder.data_model_update("test", %{"/health" => "ok", "/count" => 42})
-      decoded = Jason.decode!(json)
+      json = Encoder.update_data_model("test", %{"/health" => "ok", "/count" => 42})
+      msg = decode_first(json)
 
-      assert decoded["dataModelUpdate"]["surfaceId"] == "test"
-      assert decoded["dataModelUpdate"]["data"]["/health"] == "ok"
-      assert decoded["dataModelUpdate"]["data"]["/count"] == 42
+      assert msg["version"] == "v0.9"
+      assert msg["updateDataModel"]["surfaceId"] == "test"
+      assert msg["updateDataModel"]["data"]["/health"] == "ok"
+      assert msg["updateDataModel"]["data"]["/count"] == 42
     end
   end
 
-  describe "begin_rendering/2" do
-    test "encodes begin rendering message" do
-      json = Encoder.begin_rendering("test", "root")
-      decoded = Jason.decode!(json)
+  describe "create_surface/1" do
+    test "encodes create surface message" do
+      surface = %A2UI.Surface{id: "test", root_component_id: "root"}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
 
-      assert decoded["beginRendering"]["surfaceId"] == "test"
-      assert decoded["beginRendering"]["rootComponentId"] == "root"
+      assert msg["version"] == "v0.9"
+      assert msg["createSurface"]["surfaceId"] == "test"
+      assert msg["createSurface"]["rootComponentId"] == "root"
     end
 
-    test "includes catalog_id when provided" do
-      json = Encoder.begin_rendering("test", "root", catalog_id: "my-catalog")
-      decoded = Jason.decode!(json)
+    test "defaults rootComponentId to 'root' when nil" do
+      surface = %A2UI.Surface{id: "test"}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
 
-      assert decoded["beginRendering"]["catalogId"] == "my-catalog"
+      assert msg["createSurface"]["rootComponentId"] == "root"
+    end
+
+    test "includes catalogId when provided" do
+      surface = %A2UI.Surface{id: "test", catalog_id: "my-catalog", root_component_id: "root"}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      assert msg["createSurface"]["catalogId"] == "my-catalog"
     end
   end
 
   describe "delete_surface/1" do
     test "encodes delete surface message" do
       json = Encoder.delete_surface("test")
-      decoded = Jason.decode!(json)
+      msg = decode_first(json)
 
-      assert decoded["deleteSurface"]["surfaceId"] == "test"
+      assert msg["version"] == "v0.9"
+      assert msg["deleteSurface"]["surfaceId"] == "test"
     end
   end
 
   describe "encode_surface/1" do
-    test "produces surface_update only when no root or data" do
+    test "produces single JSON array with updateComponents only when no root or data" do
       surface = Builder.surface("test") |> Builder.text("t", "hi")
-      messages = Encoder.encode_surface(surface)
+      json = Encoder.encode_surface(surface)
+      messages = Jason.decode!(json)
 
       assert length(messages) == 1
-      assert Jason.decode!(hd(messages)) |> Map.has_key?("surfaceUpdate")
+      assert hd(messages) |> Map.has_key?("updateComponents")
+      assert hd(messages)["version"] == "v0.9"
     end
 
-    test "includes data_model_update when data is present" do
+    test "includes updateDataModel when data is present" do
       surface =
         Builder.surface("test")
         |> Builder.text("t", bind: "/val")
         |> Builder.data("/val", "hello")
 
-      messages = Encoder.encode_surface(surface)
+      json = Encoder.encode_surface(surface)
+      messages = Jason.decode!(json)
       assert length(messages) == 2
 
-      types = Enum.map(messages, fn m -> m |> Jason.decode!() |> Map.keys() |> hd() end)
-      assert "surfaceUpdate" in types
-      assert "dataModelUpdate" in types
+      types = Enum.flat_map(messages, fn m -> Map.keys(m) -- ["version"] end)
+      assert "updateComponents" in types
+      assert "updateDataModel" in types
     end
 
-    test "includes begin_rendering when root is set" do
+    test "includes createSurface when root is set" do
       surface =
         Builder.surface("test")
         |> Builder.text("t", "hi")
         |> Builder.root("t")
 
-      messages = Encoder.encode_surface(surface)
+      json = Encoder.encode_surface(surface)
+      messages = Jason.decode!(json)
       assert length(messages) == 2
 
-      types = Enum.map(messages, fn m -> m |> Jason.decode!() |> Map.keys() |> hd() end)
-      assert "surfaceUpdate" in types
-      assert "beginRendering" in types
+      types = Enum.flat_map(messages, fn m -> Map.keys(m) -- ["version"] end)
+      assert "updateComponents" in types
+      assert "createSurface" in types
     end
 
     test "includes all three message types when surface has data and root" do
@@ -179,8 +213,15 @@ defmodule A2UI.EncoderTest do
         |> Builder.data("/val", "hi")
         |> Builder.root("t")
 
-      messages = Encoder.encode_surface(surface)
+      json = Encoder.encode_surface(surface)
+      messages = Jason.decode!(json)
       assert length(messages) == 3
+    end
+
+    test "returns a single JSON string (not a list)" do
+      surface = Builder.surface("test") |> Builder.text("t", "hi")
+      result = Encoder.encode_surface(surface)
+      assert is_binary(result)
     end
   end
 
@@ -200,13 +241,14 @@ defmodule A2UI.EncoderTest do
         ]
       }
 
-      json = Encoder.surface_update(surface)
-      decoded = Jason.decode!(json)
+      json = Encoder.update_components(surface)
+      msg = decode_first(json)
 
-      [comp] = decoded["surfaceUpdate"]["components"]
-      tf = comp["component"]["TextField"]
-      assert Map.has_key?(tf, "placeholder")
-      assert Map.has_key?(tf, "maxLength")
+      [comp] = msg["updateComponents"]["components"]
+      # v0.9: properties are at top level, not nested under type key
+      assert comp["component"] == "TextField"
+      assert comp["placeholder"] == "Type here"
+      assert Map.has_key?(comp, "maxLength")
     end
   end
 end
