@@ -1,7 +1,7 @@
 defmodule A2UI.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
   @source_url "https://github.com/23min/ex_a2ui"
 
   def project do
@@ -53,7 +53,8 @@ defmodule A2UI.MixProject do
         "GitHub" => @source_url,
         "A2UI Spec" => "https://a2ui.org/"
       },
-      maintainers: ["23min"]
+      maintainers: ["23min"],
+      files: ~w(lib priv/static mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 
