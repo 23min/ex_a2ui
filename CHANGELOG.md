@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/) and uses
 [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [0.2.0] - 2026-02-09
+
+### Added
+
+- **Server-initiated push updates** — `A2UI.Server.push_data/3` and `A2UI.Server.push_surface/2` broadcast data model or full surface updates to all connected clients
+- `A2UI.Server.broadcast/3` — send arbitrary messages to all socket processes for a given surface
+- `A2UI.Server.broadcast_all/2` — send arbitrary messages to all socket processes for a provider, regardless of surface ID
+- Push functions accept `provider:` option for ergonomic registry resolution (e.g., `push_data("id", data, provider: MyProvider)`)
+- `A2UI.SurfaceProvider.handle_info/2` — optional callback for reacting to timers, PubSub messages, GenServer casts, or any external event
+- `A2UI.Supervisor` — OTP Supervisor that starts a Registry alongside Bandit for connection tracking and broadcast dispatch
+- Socket processes auto-register in Registry on connect (under both surface ID and `:__all__` key), enabling push dispatch
+- Demo server now demonstrates timer-based push (uptime counter updates every second)
+
+### Changed
+
+- `A2UI.Server.child_spec/1` now starts `A2UI.Supervisor` (which manages Registry + Bandit) instead of bare Bandit
+- `A2UI.Supervisor` uses `:rest_for_one` strategy — if Registry crashes, Bandit restarts for clean recovery
+- `A2UI.Endpoint` passes `:registry` through to Socket init args
+- `A2UI.Socket` struct gains `:surface_id` and `:registry` fields
+
 ## [0.1.0] - 2026-02-09
 
 ### Added
@@ -38,5 +58,6 @@ This project follows [Semantic Versioning](https://semver.org/) and uses
 - Runnable demo (`mix run demo.exs`)
 - 43 tests
 
+[0.2.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.2.0
 [0.1.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.1.0
 [0.0.1]: https://github.com/23min/ex_a2ui/releases/tag/v0.0.1

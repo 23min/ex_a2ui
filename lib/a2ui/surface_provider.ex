@@ -65,4 +65,48 @@ defmodule A2UI.SurfaceProvider do
   @callback handle_action(A2UI.Action.t(), state()) ::
               {:noreply, state()}
               | {:reply, A2UI.Surface.t(), state()}
+
+  @doc """
+  Handle an arbitrary message sent to the socket process.
+
+  This is **optional**. Implement it to react to timers, PubSub messages,
+  GenServer casts, or any external event and push updates to the client.
+
+  Return values:
+
+  - `{:noreply, state}` — update state, send nothing to client
+  - `{:push_data, surface_id, data, state}` — send a data model update
+  - `{:push_surface, surface, state}` — send a full surface update
+
+  ## Example: Timer-based push
+
+      def init(_opts) do
+        Process.send_after(self(), :tick, 1000)
+        {:ok, %{uptime: 0}}
+      end
+
+      def handle_info(:tick, state) do
+        Process.send_after(self(), :tick, 1000)
+        new_state = %{state | uptime: state.uptime + 1}
+        {:push_surface, surface(new_state), new_state}
+      end
+
+  ## Example: Phoenix.PubSub
+
+      # Add {:phoenix_pubsub, "~> 2.1"} to your app's deps
+      def init(_opts) do
+        Phoenix.PubSub.subscribe(MyApp.PubSub, "updates")
+        {:ok, %{}}
+      end
+
+      def handle_info({:data_changed, data}, state) do
+        {:push_data, "dashboard", data, state}
+      end
+  """
+  @callback handle_info(msg :: term(), state()) ::
+              {:noreply, state()}
+              | {:push_data, String.t(), map(), state()}
+              | {:push_surface, A2UI.Surface.t(), state()}
+
+  @optional_callbacks [handle_info: 2]
 end

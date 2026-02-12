@@ -27,7 +27,37 @@ defmodule A2UI.IntegrationTest do
     def handle_action(_, state), do: {:noreply, state}
   end
 
+  defmodule PushCounterProvider do
+    @behaviour A2UI.SurfaceProvider
+
+    alias A2UI.Builder, as: UI
+
+    @impl true
+    def init(_opts), do: {:ok, %{count: 0}}
+
+    @impl true
+    def surface(state) do
+      UI.surface("push-counter")
+      |> UI.text("count", "#{state.count}")
+      |> UI.root("count")
+    end
+
+    @impl true
+    def handle_action(_, state), do: {:noreply, state}
+
+    @impl true
+    def handle_info(:tick, state) do
+      new_state = %{state | count: state.count + 1}
+      {:push_surface, surface(new_state), new_state}
+    end
+
+    def handle_info({:data_update, data}, state) do
+      {:push_data, "push-counter", data, state}
+    end
+  end
+
   @port 14_832
+  @push_port 14_833
 
   setup_all do
     Application.ensure_all_started(:gun)
@@ -39,8 +69,16 @@ defmodule A2UI.IntegrationTest do
         ip: {127, 0, 0, 1}
       )
 
+    {:ok, push_pid} =
+      A2UI.Server.start_link(
+        provider: PushCounterProvider,
+        port: @push_port,
+        ip: {127, 0, 0, 1}
+      )
+
     on_exit(fn ->
       Process.exit(server_pid, :shutdown)
+      Process.exit(push_pid, :shutdown)
       Process.sleep(100)
     end)
 
@@ -182,5 +220,123 @@ defmodule A2UI.IntegrationTest do
     end
 
     :gun.close(conn_pid)
+  end
+
+  # --- Push integration tests ---
+
+  defp connect_push_ws do
+    {:ok, conn_pid} = :gun.open(~c"127.0.0.1", @push_port)
+    {:ok, :http} = :gun.await_up(conn_pid)
+    stream_ref = :gun.ws_upgrade(conn_pid, ~c"/ws")
+
+    receive do
+      {:gun_upgrade, ^conn_pid, ^stream_ref, [<<"websocket">>], _headers} ->
+        {:ok, conn_pid, stream_ref}
+    after
+      5_000 -> {:error, :upgrade_timeout}
+    end
+  end
+
+  describe "push updates" do
+    test "external process can push data model update to connected client" do
+      {:ok, conn_pid, stream_ref} = connect_push_ws()
+
+      # Drain initial surface frames
+      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+
+      # Push data from external process via provider: option
+      A2UI.Server.push_data("push-counter", %{"/status" => "active"},
+        provider: PushCounterProvider
+      )
+
+      # Client should receive the data model update
+      [data_json] = receive_ws_frames(conn_pid, stream_ref, 1)
+      decoded = Jason.decode!(data_json)
+      assert %{"dataModelUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+
+      :gun.close(conn_pid)
+    end
+
+    test "external process can push surface update to connected client" do
+      {:ok, conn_pid, stream_ref} = connect_push_ws()
+
+      # Drain initial surface frames
+      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+
+      # Push a full surface update via provider: option
+      surface =
+        A2UI.Builder.surface("push-counter")
+        |> A2UI.Builder.text("count", "99")
+        |> A2UI.Builder.root("count")
+
+      A2UI.Server.push_surface(surface, provider: PushCounterProvider)
+
+      # Client should receive surfaceUpdate + beginRendering
+      frames = receive_ws_frames(conn_pid, stream_ref, 2)
+      [surface_json, _render_json] = frames
+      decoded = Jason.decode!(surface_json)
+      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+
+      :gun.close(conn_pid)
+    end
+
+    test "broadcast sends to multiple connected clients" do
+      {:ok, conn1, ref1} = connect_push_ws()
+      {:ok, conn2, ref2} = connect_push_ws()
+
+      # Drain initial frames for both
+      _initial1 = receive_ws_frames(conn1, ref1, 2)
+      _initial2 = receive_ws_frames(conn2, ref2, 2)
+
+      # Push data to all connections via provider: option
+      A2UI.Server.push_data("push-counter", %{"/val" => 7}, provider: PushCounterProvider)
+
+      # Both clients should receive
+      [json1] = receive_ws_frames(conn1, ref1, 1)
+      [json2] = receive_ws_frames(conn2, ref2, 1)
+
+      assert %{"dataModelUpdate" => _} = Jason.decode!(json1)
+      assert %{"dataModelUpdate" => _} = Jason.decode!(json2)
+
+      :gun.close(conn1)
+      :gun.close(conn2)
+    end
+
+    test "handle_info in provider triggers push to client" do
+      {:ok, conn_pid, stream_ref} = connect_push_ws()
+
+      # Drain initial frames
+      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+
+      # Send :tick to all socket processes for this provider
+      A2UI.Server.broadcast("push-counter", :tick, provider: PushCounterProvider)
+
+      # Provider's handle_info(:tick, ...) returns {:push_surface, ...}
+      # Client should receive surfaceUpdate + beginRendering
+      frames = receive_ws_frames(conn_pid, stream_ref, 2)
+      [surface_json, _render_json] = frames
+      decoded = Jason.decode!(surface_json)
+      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+
+      :gun.close(conn_pid)
+    end
+
+    test "broadcast_all sends to all connections via :__all__ key" do
+      {:ok, conn_pid, stream_ref} = connect_push_ws()
+
+      # Drain initial frames
+      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+
+      # Use broadcast_all to send :tick to all sockets for this provider
+      A2UI.Server.broadcast_all(:tick, provider: PushCounterProvider)
+
+      # Provider's handle_info(:tick, ...) returns {:push_surface, ...}
+      frames = receive_ws_frames(conn_pid, stream_ref, 2)
+      [surface_json, _render_json] = frames
+      decoded = Jason.decode!(surface_json)
+      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+
+      :gun.close(conn_pid)
+    end
   end
 end

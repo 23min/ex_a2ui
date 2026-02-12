@@ -9,3 +9,4 @@ erl_crash.dump
 ex_a2ui-*.tar
 .elixir_ls/
 SESSION_CONTEXT.md
+v0.*-PLAN*.md

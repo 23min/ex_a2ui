@@ -4,7 +4,11 @@ defmodule DemoProvider do
   alias A2UI.Builder, as: UI
 
   @impl true
-  def init(_opts), do: {:ok, %{count: 0, health: "operational"}}
+  def init(_opts) do
+    # Start a 1-second timer for push updates
+    Process.send_after(self(), :tick, 1000)
+    {:ok, %{count: 0, health: "operational", uptime: 0}}
+  end
 
   @impl true
   def surface(state) do
@@ -14,12 +18,15 @@ defmodule DemoProvider do
     |> UI.text("count-val", "#{state.count}")
     |> UI.text("health-label", "Health:")
     |> UI.text("health-val", state.health)
+    |> UI.text("uptime-label", "Uptime:")
+    |> UI.text("uptime-val", "#{state.uptime}s")
     |> UI.button("inc", "Increment", action: "increment")
     |> UI.button("reset", "Reset", action: "reset")
     |> UI.row("count-row", children: ["count-label", "count-val"])
     |> UI.row("health-row", children: ["health-label", "health-val"])
+    |> UI.row("uptime-row", children: ["uptime-label", "uptime-val"])
     |> UI.row("actions", children: ["inc", "reset"])
-    |> UI.column("body", children: ["count-row", "health-row", "actions"])
+    |> UI.column("body", children: ["count-row", "health-row", "uptime-row", "actions"])
     |> UI.card("main", children: ["title", "body"], title: "Dashboard")
     |> UI.root("main")
   end
@@ -36,6 +43,13 @@ defmodule DemoProvider do
   end
 
   def handle_action(_, state), do: {:noreply, state}
+
+  @impl true
+  def handle_info(:tick, state) do
+    Process.send_after(self(), :tick, 1000)
+    new = %{state | uptime: state.uptime + 1}
+    {:push_surface, surface(new), new}
+  end
 end
 
 IO.puts("Starting A2UI demo server on http://localhost:4000")

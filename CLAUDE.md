@@ -14,7 +14,7 @@ mix ci                    # format check + compile (warnings-as-errors) + test
 mix test                  # tests only
 mix format                # auto-format
 mix docs                  # generate ExDoc
-mix run demo.exs          # runnable demo
+mix run demo_server.exs   # runnable demo (http://localhost:4000)
 ```
 
 ## Architecture
@@ -22,7 +22,7 @@ mix run demo.exs          # runnable demo
 - **Flat adjacency list** — components referenced by ID in a flat list, not nested trees. LLM-friendly, efficient for streaming.
 - **BoundValue** — data binding via JSON Pointer paths (literal, path, or both).
 - **Three API layers** — Structs (protocol types) → Builder (pipe-friendly) → DSL (deferred, only if demanded).
-- **Minimal deps** — only `jason` at runtime. `ex_doc` dev-only.
+- **Minimal deps** — `jason`, `bandit`, `websock_adapter` at runtime. `ex_doc` dev-only, `gun` test-only.
 
 ## Design Decisions
 
@@ -42,16 +42,15 @@ mix run demo.exs          # runnable demo
 - `A2UI.Encoder` — structs → A2UI JSON wire format
 - `A2UI.Decoder` — incoming userAction JSON → structs
 - `A2UI.Builder` — pipe-friendly convenience API
+- `A2UI.Server` — starts WebSocket server (Bandit), push API
+- `A2UI.Socket` — WebSock handler, bridges WS to SurfaceProvider
+- `A2UI.Endpoint` — Plug endpoint (HTTP + WS routing)
+- `A2UI.SurfaceProvider` — behaviour: `init/1`, `surface/1`, `handle_action/2`, optional `handle_info/2`
+- `A2UI.Supervisor` — OTP Supervisor (Registry + Bandit)
 
 ## Current State
 
-**v0.0.1** — core types, encoder, decoder, builder. 43 tests. No runtime (no WebSocket server).
-
-## Next Steps
-
-1. Add `@moduledoc`, `@doc`, `@spec` to all modules (ExDoc readiness)
-2. v0.1.0 — WebSocket server (Bandit + WebSock + Plug)
-3. v0.2.0 — SurfaceProvider behaviour, PubSub, live updates
+**v0.2.0** — core types, encoder/decoder, builder, WebSocket server, push updates. 95 tests.
 
 ## Pre-commit Hook
 
