@@ -114,6 +114,44 @@ defmodule A2UI.Server do
   end
 
   @doc """
+  Broadcasts a path-level data model upsert to all connected clients.
+
+  ## Options
+
+  - `:provider` — the provider module (resolves registry automatically)
+  - `:registry` — the Registry name directly (use one or the other)
+
+  ## Examples
+
+      A2UI.Server.push_data_path("dashboard", "/uptime", 42, provider: MyApp.Provider)
+  """
+  @spec push_data_path(String.t(), String.t(), term(), keyword()) :: :ok
+  def push_data_path(surface_id, path, value, opts) do
+    registry = resolve_registry(opts)
+    json = A2UI.Encoder.update_data_model_path(surface_id, path, value)
+    dispatch(registry, surface_id, {:push_frame, {:text, json}})
+  end
+
+  @doc """
+  Broadcasts a path-level data model delete to all connected clients.
+
+  ## Options
+
+  - `:provider` — the provider module (resolves registry automatically)
+  - `:registry` — the Registry name directly (use one or the other)
+
+  ## Examples
+
+      A2UI.Server.delete_data_path("dashboard", "/removed_field", provider: MyApp.Provider)
+  """
+  @spec delete_data_path(String.t(), String.t(), keyword()) :: :ok
+  def delete_data_path(surface_id, path, opts) do
+    registry = resolve_registry(opts)
+    json = A2UI.Encoder.delete_data_model_path(surface_id, path)
+    dispatch(registry, surface_id, {:push_frame, {:text, json}})
+  end
+
+  @doc """
   Sends an arbitrary message to all connected socket processes for the given surface.
 
   ## Options

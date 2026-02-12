@@ -36,11 +36,21 @@ defmodule A2UI.Surface do
           catalog_id: String.t() | nil,
           components: [A2UI.Component.t()],
           root_component_id: String.t() | nil,
-          data: map()
+          data: map(),
+          theme: A2UI.Theme.t() | nil,
+          send_data_model: boolean() | nil
         }
 
   @enforce_keys [:id]
-  defstruct [:id, :catalog_id, :root_component_id, components: [], data: %{}]
+  defstruct [
+    :id,
+    :catalog_id,
+    :root_component_id,
+    :theme,
+    :send_data_model,
+    components: [],
+    data: %{}
+  ]
 
   @doc "Creates a new empty surface."
   @spec new(String.t()) :: t()

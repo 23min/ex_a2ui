@@ -151,7 +151,7 @@
 </head>
 <body>
   <header>
-    <h1>A2UI</h1>
+    <h1 id="header-title">A2UI</h1>
     <div id="status" class="status disconnected">Disconnected</div>
   </header>
   <div class="layout">
@@ -222,11 +222,24 @@
             renderSurface();
             break;
           case 'updateDataModel':
-            Object.assign(dataModel, payload.data || {});
+            if (payload.path) {
+              // Path-level operation: upsert or delete
+              if ('value' in payload) {
+                dataModel[payload.path] = payload.value;
+              } else {
+                delete dataModel[payload.path];
+              }
+            } else {
+              // Bulk update
+              Object.assign(dataModel, payload.data || {});
+            }
             renderSurface();
             break;
           case 'createSurface':
             rootComponentId = payload.rootComponentId;
+            if (payload.theme) {
+              applyTheme(payload.theme);
+            }
             renderSurface();
             break;
           case 'deleteSurface':
@@ -235,6 +248,15 @@
             rootComponentId = null;
             surfaceEl.innerHTML = '<div class="a2ui-surface-empty">Surface deleted</div>';
             break;
+        }
+      }
+
+      function applyTheme(theme) {
+        if (theme.agentDisplayName) {
+          document.getElementById('header-title').textContent = theme.agentDisplayName;
+        }
+        if (theme.primaryColor) {
+          document.documentElement.style.setProperty('--accent', theme.primaryColor);
         }
       }
 
@@ -302,7 +324,7 @@
             }
             const body = document.createElement('div');
             body.className = 'a2ui-column';
-            (comp.children || []).forEach(childId => renderComponent(body, childId));
+            renderChildren(body, comp.children);
             card.appendChild(body);
             parent.appendChild(card);
             break;
@@ -310,14 +332,14 @@
           case 'Row': {
             const row = document.createElement('div');
             row.className = 'a2ui-row';
-            (comp.children || []).forEach(childId => renderComponent(row, childId));
+            renderChildren(row, comp.children);
             parent.appendChild(row);
             break;
           }
           case 'Column': {
             const col = document.createElement('div');
             col.className = 'a2ui-column';
-            (comp.children || []).forEach(childId => renderComponent(col, childId));
+            renderChildren(col, comp.children);
             parent.appendChild(col);
             break;
           }
@@ -336,14 +358,33 @@
         }
       }
 
+      function renderChildren(parent, children) {
+        if (!children) return;
+        if (Array.isArray(children)) {
+          children.forEach(childId => renderComponent(parent, childId));
+        } else if (children.path && children.componentId) {
+          // TemplateChildList: data-driven children
+          const el = document.createElement('div');
+          el.className = 'a2ui-unknown';
+          el.textContent = '[template: ' + children.componentId + ' × ' + children.path + ']';
+          parent.appendChild(el);
+        }
+      }
+
       function resolveValue(value) {
         if (value === undefined || value === null) return '';
-        // v0.9: plain string/number → literal value
-        if (typeof value === 'string' || typeof value === 'number') return String(value);
+        // v0.9: plain string/number/boolean → literal value
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+        // v0.9: {"call": "..."} → FunctionCall (debug display)
+        if (value.call) {
+          const args = value.args ? Object.values(value.args).map(a => resolveValue(a)).join(', ') : '';
+          return '[fn:' + value.call + '(' + args + ')]';
+        }
         // v0.9: {"path": "/..."} → data model lookup
         if (value.path && dataModel[value.path] !== undefined) {
           return String(dataModel[value.path]);
         }
+        if (value.path) return '{' + value.path + '}';
         return '';
       }
 

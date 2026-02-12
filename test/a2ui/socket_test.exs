@@ -63,6 +63,14 @@ defmodule A2UI.SocketTest do
     def handle_info(:noop, state) do
       {:noreply, state}
     end
+
+    def handle_info({:push_data_path, surface_id, path, value}, state) do
+      {:push_data_path, surface_id, path, value, state}
+    end
+
+    def handle_info({:delete_data_path, surface_id, path}, state) do
+      {:delete_data_path, surface_id, path, state}
+    end
   end
 
   describe "init/1" do
@@ -228,6 +236,32 @@ defmodule A2UI.SocketTest do
       {pid, value} = hd(entries)
       assert pid == self()
       assert value == %{}
+    end
+
+    test "handle_info delegates push_data_path return" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: PushProvider, opts: %{}})
+
+      {:push, frames, _new_state} =
+        Socket.handle_info({:push_data_path, "push-test", "/count", 99}, state)
+
+      assert [{:text, json}] = frames
+      [msg] = Jason.decode!(json)
+      assert msg["updateDataModel"]["path"] == "/count"
+      assert msg["updateDataModel"]["value"] == 99
+    end
+
+    test "handle_info delegates delete_data_path return" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: PushProvider, opts: %{}})
+
+      {:push, frames, _new_state} =
+        Socket.handle_info({:delete_data_path, "push-test", "/removed"}, state)
+
+      assert [{:text, json}] = frames
+      [msg] = Jason.decode!(json)
+      assert msg["updateDataModel"]["path"] == "/removed"
+      refute Map.has_key?(msg["updateDataModel"], "value")
     end
 
     test "registers under :__all__ key for provider-wide broadcast" do

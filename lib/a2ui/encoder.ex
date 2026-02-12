@@ -53,21 +53,39 @@ defmodule A2UI.Encoder do
     |> wrap_array()
   end
 
+  @doc "Encodes an updateDataModel path-level upsert message."
+  @spec update_data_model_path(String.t(), String.t(), term()) :: String.t()
+  def update_data_model_path(surface_id, path, value)
+      when is_binary(surface_id) and is_binary(path) do
+    %{
+      "updateDataModel" => %{
+        "surfaceId" => surface_id,
+        "path" => path,
+        "value" => value
+      },
+      "version" => @version
+    }
+    |> wrap_array()
+  end
+
+  @doc "Encodes an updateDataModel path-level delete message."
+  @spec delete_data_model_path(String.t(), String.t()) :: String.t()
+  def delete_data_model_path(surface_id, path)
+      when is_binary(surface_id) and is_binary(path) do
+    %{
+      "updateDataModel" => %{
+        "surfaceId" => surface_id,
+        "path" => path
+      },
+      "version" => @version
+    }
+    |> wrap_array()
+  end
+
   @doc "Encodes a createSurface message."
   @spec create_surface(A2UI.Surface.t()) :: String.t()
   def create_surface(%A2UI.Surface{} = surface) do
-    msg = %{
-      "surfaceId" => surface.id,
-      "rootComponentId" => surface.root_component_id || "root"
-    }
-
-    msg =
-      case surface.catalog_id do
-        nil -> msg
-        catalog_id -> Map.put(msg, "catalogId", catalog_id)
-      end
-
-    %{"createSurface" => msg, "version" => @version}
+    %{"createSurface" => build_create_surface_payload(surface), "version" => @version}
     |> wrap_array()
   end
 
@@ -120,19 +138,52 @@ defmodule A2UI.Encoder do
         nil ->
           messages
 
-        root_id ->
-          create = %{"surfaceId" => surface.id, "rootComponentId" => root_id}
-
-          create =
-            case surface.catalog_id do
-              nil -> create
-              catalog_id -> Map.put(create, "catalogId", catalog_id)
-            end
-
-          messages ++ [%{"createSurface" => create, "version" => @version}]
+        _root_id ->
+          messages ++
+            [%{"createSurface" => build_create_surface_payload(surface), "version" => @version}]
       end
 
     Jason.encode!(messages)
+  end
+
+  # --- createSurface payload builder ---
+
+  defp build_create_surface_payload(%A2UI.Surface{} = surface) do
+    msg = %{
+      "surfaceId" => surface.id,
+      "rootComponentId" => surface.root_component_id || "root"
+    }
+
+    msg = maybe_put_field(msg, "catalogId", surface.catalog_id)
+    msg = maybe_put_field(msg, "sendDataModel", surface.send_data_model)
+    maybe_encode_theme(msg, surface.theme)
+  end
+
+  defp maybe_put_field(msg, _key, nil), do: msg
+  defp maybe_put_field(msg, _key, false), do: msg
+  defp maybe_put_field(msg, key, value), do: Map.put(msg, key, value)
+
+  defp maybe_encode_theme(msg, nil), do: msg
+
+  defp maybe_encode_theme(msg, %A2UI.Theme{} = theme) do
+    theme_map = %{}
+
+    theme_map =
+      if theme.primary_color,
+        do: Map.put(theme_map, "primaryColor", theme.primary_color),
+        else: theme_map
+
+    theme_map =
+      if theme.icon_url,
+        do: Map.put(theme_map, "iconUrl", theme.icon_url),
+        else: theme_map
+
+    theme_map =
+      if theme.agent_display_name,
+        do: Map.put(theme_map, "agentDisplayName", theme.agent_display_name),
+        else: theme_map
+
+    if map_size(theme_map) > 0, do: Map.put(msg, "theme", theme_map), else: msg
   end
 
   # --- Internal encoding ---
@@ -189,6 +240,41 @@ defmodule A2UI.Encoder do
   # v0.9: both set → use path (literal+path "both" mode removed in v0.9)
   defp encode_property_value(%A2UI.BoundValue{path: path}) when not is_nil(path) do
     %{"path" => path}
+  end
+
+  # FunctionCall → {"call": "fn", "args": {...}, "returnType": "string"}
+  defp encode_property_value(%A2UI.FunctionCall{} = fc) do
+    result = %{"call" => fc.call}
+
+    result =
+      if map_size(fc.args) > 0 do
+        encoded_args =
+          Map.new(fc.args, fn {k, v} ->
+            {k, encode_property_value(v)}
+          end)
+
+        Map.put(result, "args", encoded_args)
+      else
+        result
+      end
+
+    case fc.return_type do
+      nil -> result
+      rt -> Map.put(result, "returnType", rt)
+    end
+  end
+
+  # TemplateChildList → {"path": "/items", "componentId": "item-template"}
+  defp encode_property_value(%A2UI.TemplateChildList{} = tcl) do
+    %{"path" => tcl.path, "componentId" => tcl.component_id}
+  end
+
+  # CheckRule → {"condition": <encoded>, "message": "..."}
+  defp encode_property_value(%A2UI.CheckRule{} = cr) do
+    %{
+      "condition" => encode_property_value(cr.condition),
+      "message" => cr.message
+    }
   end
 
   # v0.9: action → {"event": {"name": "...", "context": {...}}}

@@ -101,6 +101,14 @@ defmodule A2UI.Socket do
           json = A2UI.Encoder.encode_surface(surface)
           {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
 
+        {:push_data_path, surface_id, path, value, new_provider_state} ->
+          json = A2UI.Encoder.update_data_model_path(surface_id, path, value)
+          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+
+        {:delete_data_path, surface_id, path, new_provider_state} ->
+          json = A2UI.Encoder.delete_data_model_path(surface_id, path)
+          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+
         other ->
           Logger.warning(
             "A2UI.Socket: invalid handle_info return from #{inspect(provider)}: #{inspect(other)}"
