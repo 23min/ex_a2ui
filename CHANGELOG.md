@@ -47,7 +47,7 @@ This project follows [Semantic Versioning](https://semver.org/) and uses
 - `A2UI.Server.broadcast/3` — send arbitrary messages to all socket processes for a given surface
 - `A2UI.Server.broadcast_all/2` — send arbitrary messages to all socket processes for a provider, regardless of surface ID
 - Push functions accept `provider:` option for ergonomic registry resolution (e.g., `push_data("id", data, provider: MyProvider)`)
-- `A2UI.SurfaceProvider.handle_info/2` — optional callback for reacting to timers, PubSub messages, GenServer casts, or any external event
+- `handle_info/2` optional callback on `SurfaceProvider` — react to timers, PubSub messages, GenServer casts, or any external event
 - `A2UI.Supervisor` — OTP Supervisor that starts a Registry alongside Bandit for connection tracking and broadcast dispatch
 - Socket processes auto-register in Registry on connect (under both surface ID and `:__all__` key), enabling push dispatch
 - Demo server now demonstrates timer-based push (uptime counter updates every second)

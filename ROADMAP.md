@@ -117,7 +117,7 @@ Both layers produce the same structs. The encoder doesn't care which layer creat
 
 **A2UI v0.9** — the latest closed specification version.
 
-See [docs/research/spec-compliance.md](docs/research/spec-compliance.md) for the full gap analysis against the spec and comparison with the [a2ui-blazor](https://github.com/23min/a2ui-blazor) reference implementation.
+See `docs/research/spec-compliance.md` in the repository for the full gap analysis against the spec and comparison with the [a2ui-blazor](https://github.com/23min/a2ui-blazor) reference implementation.
 
 ## Development Plan
 
