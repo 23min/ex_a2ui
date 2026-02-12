@@ -251,4 +251,136 @@ defmodule A2UI.EncoderTest do
       assert Map.has_key?(comp, "maxLength")
     end
   end
+
+  describe "update_data_model_path/3" do
+    test "encodes path-level upsert with string value" do
+      json = Encoder.update_data_model_path("s1", "/user/name", "Alice")
+      msg = decode_first(json)
+
+      assert msg["version"] == "v0.9"
+      assert msg["updateDataModel"]["surfaceId"] == "s1"
+      assert msg["updateDataModel"]["path"] == "/user/name"
+      assert msg["updateDataModel"]["value"] == "Alice"
+    end
+
+    test "encodes path-level upsert with numeric value" do
+      json = Encoder.update_data_model_path("s1", "/count", 42)
+      msg = decode_first(json)
+
+      assert msg["updateDataModel"]["value"] == 42
+    end
+
+    test "encodes path-level upsert with map value" do
+      json = Encoder.update_data_model_path("s1", "/user", %{"name" => "Alice", "age" => 30})
+      msg = decode_first(json)
+
+      assert msg["updateDataModel"]["value"] == %{"name" => "Alice", "age" => 30}
+    end
+
+    test "encodes path-level upsert with null value" do
+      json = Encoder.update_data_model_path("s1", "/user/name", nil)
+      msg = decode_first(json)
+
+      assert msg["updateDataModel"]["value"] == nil
+    end
+  end
+
+  describe "delete_data_model_path/2" do
+    test "encodes path-level delete (no value key)" do
+      json = Encoder.delete_data_model_path("s1", "/user/name")
+      msg = decode_first(json)
+
+      assert msg["version"] == "v0.9"
+      assert msg["updateDataModel"]["surfaceId"] == "s1"
+      assert msg["updateDataModel"]["path"] == "/user/name"
+      refute Map.has_key?(msg["updateDataModel"], "value")
+    end
+  end
+
+  describe "create_surface with theme" do
+    test "includes theme when all fields set" do
+      surface = %A2UI.Surface{
+        id: "test",
+        root_component_id: "root",
+        theme: %A2UI.Theme{
+          primary_color: "#00BFFF",
+          icon_url: "https://example.com/icon.png",
+          agent_display_name: "My Agent"
+        }
+      }
+
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      assert msg["createSurface"]["theme"]["primaryColor"] == "#00BFFF"
+      assert msg["createSurface"]["theme"]["iconUrl"] == "https://example.com/icon.png"
+      assert msg["createSurface"]["theme"]["agentDisplayName"] == "My Agent"
+    end
+
+    test "includes theme with partial fields" do
+      surface = %A2UI.Surface{
+        id: "test",
+        root_component_id: "root",
+        theme: %A2UI.Theme{primary_color: "#FF0000"}
+      }
+
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      assert msg["createSurface"]["theme"]["primaryColor"] == "#FF0000"
+      refute Map.has_key?(msg["createSurface"]["theme"], "iconUrl")
+    end
+
+    test "omits theme when nil" do
+      surface = %A2UI.Surface{id: "test", root_component_id: "root"}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      refute Map.has_key?(msg["createSurface"], "theme")
+    end
+  end
+
+  describe "create_surface with sendDataModel" do
+    test "includes sendDataModel when true" do
+      surface = %A2UI.Surface{id: "test", root_component_id: "root", send_data_model: true}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      assert msg["createSurface"]["sendDataModel"] == true
+    end
+
+    test "omits sendDataModel when false" do
+      surface = %A2UI.Surface{id: "test", root_component_id: "root", send_data_model: false}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      refute Map.has_key?(msg["createSurface"], "sendDataModel")
+    end
+
+    test "omits sendDataModel when nil" do
+      surface = %A2UI.Surface{id: "test", root_component_id: "root"}
+      json = Encoder.create_surface(surface)
+      msg = decode_first(json)
+
+      refute Map.has_key?(msg["createSurface"], "sendDataModel")
+    end
+  end
+
+  describe "encode_surface with theme and sendDataModel" do
+    test "includes theme and sendDataModel in createSurface message" do
+      surface =
+        Builder.surface("test")
+        |> Builder.text("t", "hi")
+        |> Builder.theme(primary_color: "#00BFFF", agent_display_name: "Bot")
+        |> Builder.send_data_model(true)
+        |> Builder.root("t")
+
+      json = Encoder.encode_surface(surface)
+      messages = Jason.decode!(json)
+
+      create_msg = Enum.find(messages, &Map.has_key?(&1, "createSurface"))
+      assert create_msg["createSurface"]["theme"]["primaryColor"] == "#00BFFF"
+      assert create_msg["createSurface"]["sendDataModel"] == true
+    end
+  end
 end

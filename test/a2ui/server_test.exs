@@ -240,4 +240,48 @@ defmodule A2UI.ServerTest do
       assert :ok = A2UI.Server.broadcast_all(:ping, registry: registry)
     end
   end
+
+  describe "push_data_path/4" do
+    setup do
+      registry_name = :"push_data_path_test_#{System.unique_integer([:positive])}"
+      Registry.start_link(keys: :duplicate, name: registry_name)
+      {:ok, registry: registry_name}
+    end
+
+    test "dispatches path-level upsert to registered processes", %{registry: registry} do
+      Registry.register(registry, "dashboard", %{})
+
+      A2UI.Server.push_data_path("dashboard", "/count", 42, registry: registry)
+
+      assert_receive {:push_frame, {:text, json}}
+      [msg] = Jason.decode!(json)
+      assert msg["updateDataModel"]["surfaceId"] == "dashboard"
+      assert msg["updateDataModel"]["path"] == "/count"
+      assert msg["updateDataModel"]["value"] == 42
+    end
+
+    test "is a no-op when no connections exist", %{registry: registry} do
+      assert :ok = A2UI.Server.push_data_path("empty", "/x", 1, registry: registry)
+    end
+  end
+
+  describe "delete_data_path/3" do
+    setup do
+      registry_name = :"delete_data_path_test_#{System.unique_integer([:positive])}"
+      Registry.start_link(keys: :duplicate, name: registry_name)
+      {:ok, registry: registry_name}
+    end
+
+    test "dispatches path-level delete to registered processes", %{registry: registry} do
+      Registry.register(registry, "dashboard", %{})
+
+      A2UI.Server.delete_data_path("dashboard", "/removed", registry: registry)
+
+      assert_receive {:push_frame, {:text, json}}
+      [msg] = Jason.decode!(json)
+      assert msg["updateDataModel"]["surfaceId"] == "dashboard"
+      assert msg["updateDataModel"]["path"] == "/removed"
+      refute Map.has_key?(msg["updateDataModel"], "value")
+    end
+  end
 end

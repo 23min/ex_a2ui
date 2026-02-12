@@ -25,7 +25,7 @@ defmodule A2UI.Builder do
   `/system/health` changes.
   """
 
-  alias A2UI.{BoundValue, Action, Component, Surface}
+  alias A2UI.{BoundValue, Action, CheckRule, Component, FunctionCall, TemplateChildList, Surface}
 
   # --- Surface ---
 
@@ -41,6 +41,18 @@ defmodule A2UI.Builder do
   @spec data(Surface.t(), String.t(), term()) :: Surface.t()
   def data(%Surface{} = s, path, value), do: Surface.put_data(s, path, value)
 
+  @doc "Sets the theme on the surface."
+  @spec theme(Surface.t(), keyword()) :: Surface.t()
+  def theme(%Surface{} = s, opts) when is_list(opts) do
+    %{s | theme: A2UI.Theme.new(opts)}
+  end
+
+  @doc "Enables or disables the sendDataModel flag on the surface."
+  @spec send_data_model(Surface.t(), boolean()) :: Surface.t()
+  def send_data_model(%Surface{} = s, flag \\ true) when is_boolean(flag) do
+    %{s | send_data_model: flag}
+  end
+
   # --- Display components ---
 
   @doc """
@@ -55,9 +67,13 @@ defmodule A2UI.Builder do
       UI.text(surface, "greeting", "Hello!")
       UI.text(surface, "name", bind: "/user/name")
   """
-  @spec text(Surface.t(), String.t(), String.t() | keyword()) :: Surface.t()
+  @spec text(Surface.t(), String.t(), String.t() | FunctionCall.t() | keyword()) :: Surface.t()
   def text(%Surface{} = s, id, text) when is_binary(text) do
     add(s, id, :text, %{text: BoundValue.literal(text)})
+  end
+
+  def text(%Surface{} = s, id, %FunctionCall{} = fc) do
+    add(s, id, :text, %{text: fc})
   end
 
   def text(%Surface{} = s, id, opts) when is_list(opts) do
@@ -126,6 +142,7 @@ defmodule A2UI.Builder do
   - `placeholder:` — placeholder text
   - `bind:` — data model path for the field value
   - `action:` — action name triggered on change/submit
+  - `checks:` — list of `CheckRule` validation rules
   """
   @spec text_field(Surface.t(), String.t(), keyword()) :: Surface.t()
   def text_field(%Surface{} = s, id, opts \\ []) do
@@ -145,6 +162,8 @@ defmodule A2UI.Builder do
         name -> Map.put(props, :action, Action.new(name))
       end
 
+    props = maybe_put(props, :checks, opts[:checks])
+
     add(s, id, :text_field, props)
   end
 
@@ -156,6 +175,7 @@ defmodule A2UI.Builder do
   - `label:` — checkbox label
   - `bind:` — data model path for checked state
   - `action:` — action name triggered on toggle
+  - `checks:` — list of `CheckRule` validation rules
   """
   @spec checkbox(Surface.t(), String.t(), keyword()) :: Surface.t()
   def checkbox(%Surface{} = s, id, opts \\ []) do
@@ -174,6 +194,8 @@ defmodule A2UI.Builder do
         name -> Map.put(props, :action, Action.new(name))
       end
 
+    props = maybe_put(props, :checks, opts[:checks])
+
     add(s, id, :checkbox, props)
   end
 
@@ -186,6 +208,7 @@ defmodule A2UI.Builder do
   - `max:` — maximum value
   - `bind:` — data model path for current value
   - `action:` — action name triggered on change
+  - `checks:` — list of `CheckRule` validation rules
   """
   @spec slider(Surface.t(), String.t(), keyword()) :: Surface.t()
   def slider(%Surface{} = s, id, opts \\ []) do
@@ -205,6 +228,8 @@ defmodule A2UI.Builder do
         name -> Map.put(props, :action, Action.new(name))
       end
 
+    props = maybe_put(props, :checks, opts[:checks])
+
     add(s, id, :slider, props)
   end
 
@@ -215,17 +240,18 @@ defmodule A2UI.Builder do
 
   ## Options
 
-  - `children:` — list of child component IDs
+  - `children:` — list of child component IDs or a `TemplateChildList`
   - `title:` — card title text
 
   ## Examples
 
       UI.card(surface, "main", children: ["title", "body", "actions"])
+      UI.card(surface, "list", children: UI.template_children("/items", "item-tpl"))
   """
   @spec card(Surface.t(), String.t(), keyword()) :: Surface.t()
   def card(%Surface{} = s, id, opts \\ []) do
     props = %{}
-    props = maybe_put(props, :children, opts[:children])
+    props = maybe_put_children(props, opts[:children])
     props = maybe_put_literal(props, :title, opts[:title])
     add(s, id, :card, props)
   end
@@ -235,12 +261,12 @@ defmodule A2UI.Builder do
 
   ## Options
 
-  - `children:` — list of child component IDs
+  - `children:` — list of child component IDs or a `TemplateChildList`
   """
   @spec row(Surface.t(), String.t(), keyword()) :: Surface.t()
   def row(%Surface{} = s, id, opts \\ []) do
     props = %{}
-    props = maybe_put(props, :children, opts[:children])
+    props = maybe_put_children(props, opts[:children])
     add(s, id, :row, props)
   end
 
@@ -249,12 +275,12 @@ defmodule A2UI.Builder do
 
   ## Options
 
-  - `children:` — list of child component IDs
+  - `children:` — list of child component IDs or a `TemplateChildList`
   """
   @spec column(Surface.t(), String.t(), keyword()) :: Surface.t()
   def column(%Surface{} = s, id, opts \\ []) do
     props = %{}
-    props = maybe_put(props, :children, opts[:children])
+    props = maybe_put_children(props, opts[:children])
     add(s, id, :column, props)
   end
 
@@ -263,13 +289,13 @@ defmodule A2UI.Builder do
 
   ## Options
 
-  - `children:` — list of child component IDs
+  - `children:` — list of child component IDs or a `TemplateChildList`
   - `title:` — modal title
   """
   @spec modal(Surface.t(), String.t(), keyword()) :: Surface.t()
   def modal(%Surface{} = s, id, opts \\ []) do
     props = %{}
-    props = maybe_put(props, :children, opts[:children])
+    props = maybe_put_children(props, opts[:children])
     props = maybe_put_literal(props, :title, opts[:title])
     add(s, id, :modal, props)
   end
@@ -293,6 +319,43 @@ defmodule A2UI.Builder do
     add(s, id, {:custom, type}, Map.new(props))
   end
 
+  # --- FunctionCall helpers ---
+
+  @doc "Creates a `formatString` FunctionCall for use as a dynamic value."
+  @spec format_string(String.t()) :: FunctionCall.t()
+  def format_string(template), do: FunctionCall.format_string(template)
+
+  @doc "Creates an `openUrl` FunctionCall for use as a dynamic value."
+  @spec open_url(String.t()) :: FunctionCall.t()
+  def open_url(url), do: FunctionCall.open_url(url)
+
+  # --- TemplateChildList helpers ---
+
+  @doc "Creates a `TemplateChildList` for data-driven children."
+  @spec template_children(String.t(), String.t()) :: TemplateChildList.t()
+  def template_children(path, component_id),
+    do: TemplateChildList.new(path, component_id)
+
+  # --- CheckRule helpers ---
+
+  @doc "Creates a `required` check rule bound to a data model path."
+  @spec required_check(String.t(), String.t()) :: CheckRule.t()
+  def required_check(bind_path, message \\ "This field is required") do
+    CheckRule.required(BoundValue.bind(bind_path), message)
+  end
+
+  @doc "Creates a `max_length` check rule bound to a data model path."
+  @spec max_length_check(String.t(), integer(), String.t()) :: CheckRule.t()
+  def max_length_check(bind_path, max, message \\ "Too long") do
+    CheckRule.max_length(BoundValue.bind(bind_path), max, message)
+  end
+
+  @doc "Creates a `regex` check rule bound to a data model path."
+  @spec regex_check(String.t(), String.t(), String.t()) :: CheckRule.t()
+  def regex_check(bind_path, pattern, message) do
+    CheckRule.regex(BoundValue.bind(bind_path), pattern, message)
+  end
+
   # --- Internal helpers ---
 
   defp add(%Surface{} = s, id, type, properties) do
@@ -304,6 +367,12 @@ defmodule A2UI.Builder do
   defp resolve_bound_value(nil, text), do: BoundValue.literal(text)
   defp resolve_bound_value(path, nil), do: BoundValue.bind(path)
   defp resolve_bound_value(path, text), do: BoundValue.bind(path, text)
+
+  defp maybe_put_children(map, nil), do: map
+  defp maybe_put_children(map, %TemplateChildList{} = tcl), do: Map.put(map, :children, tcl)
+
+  defp maybe_put_children(map, children) when is_list(children),
+    do: Map.put(map, :children, children)
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
