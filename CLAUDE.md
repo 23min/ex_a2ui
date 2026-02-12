@@ -50,7 +50,7 @@ mix run demo_server.exs   # runnable demo (http://localhost:4000)
 
 ## Current State
 
-**v0.3.0-dev** — v0.9 wire format migration. 100 tests.
+**v0.3.0** — v0.9 wire format, push updates, WebSocket server. 100 tests. Published on [Hex.pm](https://hex.pm/packages/ex_a2ui).
 
 ## Pre-commit Hook
 
