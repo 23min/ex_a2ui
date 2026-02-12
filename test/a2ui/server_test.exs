@@ -79,8 +79,9 @@ defmodule A2UI.ServerTest do
       A2UI.Server.push_data("dashboard", %{"/count" => 42}, registry: registry)
 
       assert_receive {:push_frame, {:text, json}}
-      decoded = Jason.decode!(json)
-      assert %{"dataModelUpdate" => %{"surfaceId" => "dashboard"}} = decoded
+      [msg] = Jason.decode!(json)
+      assert %{"updateDataModel" => %{"surfaceId" => "dashboard"}} = msg
+      assert msg["version"] == "v0.9"
     end
 
     test "accepts provider: option to resolve registry", %{registry: _registry} do
@@ -93,8 +94,8 @@ defmodule A2UI.ServerTest do
       A2UI.Server.push_data("dashboard", %{"/count" => 42}, provider: provider)
 
       assert_receive {:push_frame, {:text, json}}
-      decoded = Jason.decode!(json)
-      assert %{"dataModelUpdate" => %{"surfaceId" => "dashboard"}} = decoded
+      [msg] = Jason.decode!(json)
+      assert %{"updateDataModel" => %{"surfaceId" => "dashboard"}} = msg
     end
 
     test "is a no-op when no connections exist", %{registry: registry} do
@@ -120,12 +121,10 @@ defmodule A2UI.ServerTest do
 
       A2UI.Server.push_surface(surface, registry: registry)
 
-      assert_receive {:push_frames, frames}
-      assert length(frames) >= 1
-
-      {:text, first} = hd(frames)
-      decoded = Jason.decode!(first)
-      assert %{"surfaceUpdate" => %{"surfaceId" => "test-surface"}} = decoded
+      assert_receive {:push_frame, {:text, json}}
+      messages = Jason.decode!(json)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "test-surface"
     end
 
     test "is a no-op when no connections exist", %{registry: registry} do

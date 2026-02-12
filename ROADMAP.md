@@ -64,7 +64,7 @@ A2UI uses flat adjacency lists instead of nested trees for three reasons:
 
 ```
 lib/a2ui/
-  component.ex         — Component struct + 17 standard types
+  component.ex         — Component struct + 18 standard types
   surface.ex           — Surface struct (flat component list + data model)
   bound_value.ex       — Data binding (literal, path, or both)
   action.ex            — User action struct
@@ -133,32 +133,15 @@ Bandit-based HTTP + WebSocket endpoint. SurfaceProvider behaviour. Debug rendere
 
 Server-initiated push (push_data, push_surface, broadcast, broadcast_all). OTP Supervisor with Registry. Optional handle_info/2 callback. 95 tests.
 
-### v0.3.0 — v0.9 Wire Format Migration
+### v0.3.0 — v0.9 Wire Format Migration ✅
 
-**Goal:** Make encoder/decoder output v0.9-compliant JSON. This is the big breaking change.
+v0.9-compliant JSON wire format. Breaking changes to encoder/decoder output. 100 tests.
 
-**Message renames:**
-- `surfaceUpdate` → `updateComponents`
-- `dataModelUpdate` → `updateDataModel`
-- `beginRendering` → `createSurface` (add required `catalogId`)
-- Client: `userAction` → `action` (new envelope: `surfaceId`, `sourceComponentId`, `timestamp`)
-- All messages get `"version": "v0.9"` field
-- Messages wrapped in arrays (spec requirement)
+**Message renames:** `surfaceUpdate` → `updateComponents`, `dataModelUpdate` → `updateDataModel`, `beginRendering` → `createSurface`, `userAction` → `action` (with event envelope). All messages include `"version": "v0.9"` and are wrapped in JSON arrays.
 
-**Component format change:**
-- v0.8: `{"id": "t", "component": {"Text": {"text": {"literalString": "hi"}}}}`
-- v0.9: `{"id": "t", "component": "Text", "text": "hi"}`
-- Properties move to top level, no more wrapper object
-- Literal values are plain values, not `{"literalString": "..."}` wrappers
+**Component format change:** Properties moved to top level (flat format), literal values are plain values (no wrapper objects), component type is a string discriminator.
 
-**Struct/type changes:**
-- Add `:audio_player` component type
-- Rename `:multiple_choice` → `:choice_picker`
-- Root component convention: `id: "root"`
-- Surface gains `catalog_id` field
-- `A2UI.spec_version/0` → `"v0.9"`
-
-**Touched modules:** Encoder, Decoder, Component, Surface, BoundValue, Action, Builder, all tests, demo.
+**Struct/type changes:** Added `:audio_player`, renamed `:multiple_choice` → `:choice_picker` (18 standard types). Surface gained `catalog_id` field. `encode_surface/1` returns single JSON string (was list of strings).
 
 ### v0.4.0 — v0.9 Data Features
 
@@ -211,7 +194,7 @@ Server-initiated push (push_data, push_surface, broadcast, broadcast_all). OTP S
 ### v0.6.0 — Demo Parity & Production Hardening
 
 **Demo agents** (parity with a2ui-blazor's 5 agents):
-- Component gallery — showcase all 17 standard component types
+- Component gallery — showcase all 18 standard component types
 - Data binding demo — reactive updates, formatString interpolation
 - Form + validation demo — input components with CheckRule
 - Push/streaming demo — timer-based updates, live data
@@ -234,7 +217,7 @@ Server-initiated push (push_data, push_surface, broadcast, broadcast_all). OTP S
 
 ## Dependencies
 
-### Current (v0.2.0)
+### Current (v0.3.0)
 
 ```elixir
 {:jason, "~> 1.4"}            # JSON encoding/decoding

@@ -30,35 +30,37 @@ IO.puts("Root: #{surface.root_component_id}")
 IO.puts("Data model keys: #{surface.data |> Map.keys() |> Enum.join(", ")}")
 IO.puts("")
 
-# Encode and pretty-print each message
-messages = A2UI.Encoder.encode_surface(surface)
+# Encode and pretty-print the v0.9 message array
+json = A2UI.Encoder.encode_surface(surface)
+messages = Jason.decode!(json)
 
-Enum.each(messages, fn json ->
-  decoded = Jason.decode!(json)
-  type = decoded |> Map.keys() |> hd()
-  IO.puts("--- #{type} ---")
-  IO.puts(Jason.encode!(decoded, pretty: true))
+Enum.each(messages, fn msg ->
+  type = msg |> Map.keys() |> Enum.find(&(&1 != "version"))
+  IO.puts("--- #{type} (#{msg["version"]}) ---")
+  IO.puts(Jason.encode!(msg, pretty: true))
   IO.puts("")
 end)
 
-# Demonstrate decoding an incoming user action
-IO.puts("=== Decoding incoming userAction ===\n")
+# Demonstrate decoding an incoming v0.9 action
+IO.puts("=== Decoding incoming action ===\n")
 
-incoming = Jason.encode!(%{
-  "userAction" => %{
-    "action" => %{
+incoming = Jason.encode!([%{
+  "action" => %{
+    "event" => %{
       "name" => "restart_service",
       "context" => %{"confirmed" => true}
-    }
+    },
+    "surfaceId" => "app-status"
   }
-})
+}])
 
 IO.puts("Incoming JSON: #{incoming}\n")
 
 case A2UI.Decoder.decode(incoming) do
-  {:ok, {:user_action, action}} ->
+  {:ok, [{:action, action, metadata}]} ->
     IO.puts("Decoded action: #{action.name}")
     IO.puts("Context: #{inspect(action.context)}")
+    IO.puts("Surface ID: #{metadata.surface_id}")
   {:error, reason} ->
     IO.puts("Error: #{inspect(reason)}")
 end

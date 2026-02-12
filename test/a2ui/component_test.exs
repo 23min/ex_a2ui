@@ -12,7 +12,10 @@ defmodule A2UI.ComponentTest do
     assert :column in types
     assert :modal in types
     assert :slider in types
-    assert length(types) == 17
+    assert :audio_player in types
+    assert :choice_picker in types
+    refute :multiple_choice in types
+    assert length(types) == 18
   end
 
   test "standard_type? returns true for standard types" do

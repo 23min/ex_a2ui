@@ -98,63 +98,69 @@ defmodule A2UI.IntegrationTest do
     end
   end
 
-  defp receive_ws_frames(conn_pid, stream_ref, count, acc \\ []) do
-    if length(acc) >= count do
-      Enum.reverse(acc)
-    else
-      receive do
-        {:gun_ws, ^conn_pid, ^stream_ref, {:text, data}} ->
-          receive_ws_frames(conn_pid, stream_ref, count, [data | acc])
-      after
-        5_000 -> {:error, :timeout, Enum.reverse(acc)}
-      end
+  # v0.9: encode_surface returns a single JSON array, so one WS frame
+  defp receive_ws_frame(conn_pid, stream_ref) do
+    receive do
+      {:gun_ws, ^conn_pid, ^stream_ref, {:text, data}} -> data
+    after
+      5_000 -> flunk("Timeout waiting for WS frame")
     end
+  end
+
+  defp decode_messages(json) do
+    Jason.decode!(json)
   end
 
   test "connects and receives initial surface" do
     {:ok, conn_pid, stream_ref} = connect_ws()
 
-    # surfaceUpdate + beginRendering (no data)
-    frames = receive_ws_frames(conn_pid, stream_ref, 2)
+    # v0.9: single frame containing JSON array [updateComponents, createSurface]
+    json = receive_ws_frame(conn_pid, stream_ref)
+    messages = decode_messages(json)
 
-    [surface_update_json, begin_rendering_json] = frames
-
-    surface_update = Jason.decode!(surface_update_json)
-    assert %{"surfaceUpdate" => %{"surfaceId" => "counter"}} = surface_update
-    components = surface_update["surfaceUpdate"]["components"]
+    update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+    assert update["updateComponents"]["surfaceId"] == "counter"
+    components = update["updateComponents"]["components"]
     assert length(components) == 3
+    assert update["version"] == "v0.9"
 
-    begin_rendering = Jason.decode!(begin_rendering_json)
-    assert %{"beginRendering" => %{"rootComponentId" => "main"}} = begin_rendering
+    create = Enum.find(messages, &Map.has_key?(&1, "createSurface"))
+    assert create["createSurface"]["rootComponentId"] == "main"
 
     :gun.close(conn_pid)
   end
 
-  test "sends userAction and receives updated surface" do
+  test "sends action and receives updated surface" do
     {:ok, conn_pid, stream_ref} = connect_ws()
 
-    # Drain initial frames
-    _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+    # Drain initial frame
+    _initial = receive_ws_frame(conn_pid, stream_ref)
 
-    # Send increment action
+    # Send v0.9 action with event envelope
     action_json =
-      Jason.encode!(%{
-        "userAction" => %{"action" => %{"name" => "inc"}}
-      })
+      Jason.encode!([
+        %{
+          "action" => %{
+            "event" => %{"name" => "inc"},
+            "surfaceId" => "counter"
+          }
+        }
+      ])
 
     :gun.ws_send(conn_pid, stream_ref, {:text, action_json})
 
-    # Receive updated surface (surfaceUpdate + beginRendering)
-    response = receive_ws_frames(conn_pid, stream_ref, 2)
+    # Receive updated surface (single frame, JSON array)
+    response_json = receive_ws_frame(conn_pid, stream_ref)
+    messages = decode_messages(response_json)
 
-    [update_json, _render_json] = response
-    update = Jason.decode!(update_json)
-    assert %{"surfaceUpdate" => %{"surfaceId" => "counter"}} = update
+    update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+    assert update["updateComponents"]["surfaceId"] == "counter"
 
-    # The count text should now show "1"
-    components = update["surfaceUpdate"]["components"]
+    # v0.9: properties at top level, literal values are plain
+    components = update["updateComponents"]["components"]
     text_comp = Enum.find(components, &(&1["id"] == "count"))
-    assert text_comp["component"]["Text"]["text"]["literalString"] == "1"
+    assert text_comp["component"] == "Text"
+    assert text_comp["text"] == "1"
 
     :gun.close(conn_pid)
   end
@@ -162,14 +168,18 @@ defmodule A2UI.IntegrationTest do
   test "noreply action does not send response" do
     {:ok, conn_pid, stream_ref} = connect_ws()
 
-    # Drain initial frames
-    _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+    # Drain initial frame
+    _initial = receive_ws_frame(conn_pid, stream_ref)
 
     # Send unknown action that triggers noreply
     action_json =
-      Jason.encode!(%{
-        "userAction" => %{"action" => %{"name" => "unknown"}}
-      })
+      Jason.encode!([
+        %{
+          "action" => %{
+            "event" => %{"name" => "unknown"}
+          }
+        }
+      ])
 
     :gun.ws_send(conn_pid, stream_ref, {:text, action_json})
 
@@ -241,18 +251,18 @@ defmodule A2UI.IntegrationTest do
     test "external process can push data model update to connected client" do
       {:ok, conn_pid, stream_ref} = connect_push_ws()
 
-      # Drain initial surface frames
-      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+      # Drain initial surface frame
+      _initial = receive_ws_frame(conn_pid, stream_ref)
 
       # Push data from external process via provider: option
       A2UI.Server.push_data("push-counter", %{"/status" => "active"},
         provider: PushCounterProvider
       )
 
-      # Client should receive the data model update
-      [data_json] = receive_ws_frames(conn_pid, stream_ref, 1)
-      decoded = Jason.decode!(data_json)
-      assert %{"dataModelUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+      # Client should receive the data model update (v0.9 array)
+      data_json = receive_ws_frame(conn_pid, stream_ref)
+      [msg] = decode_messages(data_json)
+      assert %{"updateDataModel" => %{"surfaceId" => "push-counter"}} = msg
 
       :gun.close(conn_pid)
     end
@@ -260,8 +270,8 @@ defmodule A2UI.IntegrationTest do
     test "external process can push surface update to connected client" do
       {:ok, conn_pid, stream_ref} = connect_push_ws()
 
-      # Drain initial surface frames
-      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+      # Drain initial surface frame
+      _initial = receive_ws_frame(conn_pid, stream_ref)
 
       # Push a full surface update via provider: option
       surface =
@@ -271,11 +281,11 @@ defmodule A2UI.IntegrationTest do
 
       A2UI.Server.push_surface(surface, provider: PushCounterProvider)
 
-      # Client should receive surfaceUpdate + beginRendering
-      frames = receive_ws_frames(conn_pid, stream_ref, 2)
-      [surface_json, _render_json] = frames
-      decoded = Jason.decode!(surface_json)
-      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+      # Client should receive single frame with [updateComponents, createSurface]
+      json = receive_ws_frame(conn_pid, stream_ref)
+      messages = decode_messages(json)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "push-counter"
 
       :gun.close(conn_pid)
     end
@@ -285,18 +295,20 @@ defmodule A2UI.IntegrationTest do
       {:ok, conn2, ref2} = connect_push_ws()
 
       # Drain initial frames for both
-      _initial1 = receive_ws_frames(conn1, ref1, 2)
-      _initial2 = receive_ws_frames(conn2, ref2, 2)
+      _initial1 = receive_ws_frame(conn1, ref1)
+      _initial2 = receive_ws_frame(conn2, ref2)
 
       # Push data to all connections via provider: option
       A2UI.Server.push_data("push-counter", %{"/val" => 7}, provider: PushCounterProvider)
 
       # Both clients should receive
-      [json1] = receive_ws_frames(conn1, ref1, 1)
-      [json2] = receive_ws_frames(conn2, ref2, 1)
+      json1 = receive_ws_frame(conn1, ref1)
+      json2 = receive_ws_frame(conn2, ref2)
 
-      assert %{"dataModelUpdate" => _} = Jason.decode!(json1)
-      assert %{"dataModelUpdate" => _} = Jason.decode!(json2)
+      [msg1] = decode_messages(json1)
+      [msg2] = decode_messages(json2)
+      assert %{"updateDataModel" => _} = msg1
+      assert %{"updateDataModel" => _} = msg2
 
       :gun.close(conn1)
       :gun.close(conn2)
@@ -305,18 +317,18 @@ defmodule A2UI.IntegrationTest do
     test "handle_info in provider triggers push to client" do
       {:ok, conn_pid, stream_ref} = connect_push_ws()
 
-      # Drain initial frames
-      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+      # Drain initial frame
+      _initial = receive_ws_frame(conn_pid, stream_ref)
 
       # Send :tick to all socket processes for this provider
       A2UI.Server.broadcast("push-counter", :tick, provider: PushCounterProvider)
 
       # Provider's handle_info(:tick, ...) returns {:push_surface, ...}
-      # Client should receive surfaceUpdate + beginRendering
-      frames = receive_ws_frames(conn_pid, stream_ref, 2)
-      [surface_json, _render_json] = frames
-      decoded = Jason.decode!(surface_json)
-      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+      # Client should receive single frame with messages array
+      json = receive_ws_frame(conn_pid, stream_ref)
+      messages = decode_messages(json)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "push-counter"
 
       :gun.close(conn_pid)
     end
@@ -324,17 +336,17 @@ defmodule A2UI.IntegrationTest do
     test "broadcast_all sends to all connections via :__all__ key" do
       {:ok, conn_pid, stream_ref} = connect_push_ws()
 
-      # Drain initial frames
-      _initial = receive_ws_frames(conn_pid, stream_ref, 2)
+      # Drain initial frame
+      _initial = receive_ws_frame(conn_pid, stream_ref)
 
       # Use broadcast_all to send :tick to all sockets for this provider
       A2UI.Server.broadcast_all(:tick, provider: PushCounterProvider)
 
       # Provider's handle_info(:tick, ...) returns {:push_surface, ...}
-      frames = receive_ws_frames(conn_pid, stream_ref, 2)
-      [surface_json, _render_json] = frames
-      decoded = Jason.decode!(surface_json)
-      assert %{"surfaceUpdate" => %{"surfaceId" => "push-counter"}} = decoded
+      json = receive_ws_frame(conn_pid, stream_ref)
+      messages = decode_messages(json)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "push-counter"
 
       :gun.close(conn_pid)
     end

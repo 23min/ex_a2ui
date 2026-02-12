@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/) and uses
 [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [0.3.0] - 2026-02-12
+
+### Breaking Changes
+
+- **v0.9 wire format** — all encoder output now uses v0.9 message names and structure
+  - `surfaceUpdate` → `updateComponents`
+  - `dataModelUpdate` → `updateDataModel`
+  - `beginRendering` → `createSurface`
+  - `userAction` → `action` (with `event` envelope containing `name`, `context`, `surfaceId`, `sourceComponentId`, `timestamp`)
+  - All messages include `"version": "v0.9"` field
+  - All messages wrapped in JSON arrays
+- **Component format** — properties moved to top level (flat format), component type is a string discriminator
+  - v0.8: `{"id": "t", "component": {"Text": {"text": {"literalString": "hi"}}}}`
+  - v0.9: `{"id": "t", "component": "Text", "text": "hi"}`
+- **BoundValue encoding** — literal values are plain values (no `literalString` wrapper), path bindings use `{"path": "..."}`
+- **`encode_surface/1`** — returns a single `String.t()` (JSON array) instead of `[String.t()]` (list of JSON strings)
+- **Encoder function renames** — `surface_update/1` → `update_components/1`, `data_model_update/2` → `update_data_model/2`, `begin_rendering/2,3` → `create_surface/1`
+- **Decoder return format** — `{:ok, {:user_action, action}}` → `{:ok, [{:action, action, metadata}]}`
+- Renamed `:multiple_choice` component type → `:choice_picker`
+
+### Added
+
+- `:audio_player` component type (18 standard types total)
+- `catalog_id` field on `A2UI.Surface` struct
+- Decoder extracts metadata from action envelope (`surface_id`, `source_component_id`, `timestamp`)
+- Decoder accepts both JSON arrays and single objects
+- `A2UI.spec_version/0` now returns `"v0.9"`
+
+### Changed
+
+- Debug renderer (`priv/static/index.html`) updated for v0.9 message format
+- Demo script (`demo.exs`) updated for v0.9 API
+- 100 tests (was 95)
+
 ## [0.2.0] - 2026-02-09
 
 ### Added
@@ -58,6 +92,7 @@ This project follows [Semantic Versioning](https://semver.org/) and uses
 - Runnable demo (`mix run demo.exs`)
 - 43 tests
 
+[0.3.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.3.0
 [0.2.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.2.0
 [0.1.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.1.0
 [0.0.1]: https://github.com/23min/ex_a2ui/releases/tag/v0.0.1

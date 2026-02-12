@@ -2,9 +2,9 @@
 
 Lightweight Elixir library for Google's [A2UI](https://a2ui.org/) protocol. Serve interactive, agent-driven UI surfaces from any BEAM app via declarative JSON over WebSocket — no Phoenix or LiveView required.
 
-**Status:** v0.1.0 — WebSocket server is live. See [ROADMAP.md](ROADMAP.md) for the full plan.
+**Status:** v0.3.0 — v0.9 wire format, push updates, WebSocket server. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
-**A2UI spec:** v0.8 (public preview)
+**A2UI spec:** v0.9
 
 ## Why Elixir for A2UI?
 
@@ -23,7 +23,7 @@ A2UI is a protocol where servers produce declarative JSON describing UI, and cli
 | Clients | Browser only | Browser, Flutter, Angular, React — any A2UI renderer |
 | Dependencies | ~12+ packages (full web framework) | ~4 packages (protocol library) |
 | AI/LLM friendly | No (HTML templates) | Yes (flat JSON designed for LLM generation) |
-| Maturity | Battle-tested, huge ecosystem | Early, A2UI spec is v0.8 preview |
+| Maturity | Battle-tested, huge ecosystem | Early, A2UI spec is v0.9 |
 
 **Use LiveView** for full web applications. **Use ex_a2ui** for:
 
@@ -36,7 +36,7 @@ A2UI is a protocol where servers produce declarative JSON describing UI, and cli
 ```elixir
 def deps do
   [
-    {:ex_a2ui, "~> 0.1.0"}
+    {:ex_a2ui, "~> 0.3.0"}
   ]
 end
 ```
@@ -103,7 +103,7 @@ Elixir app (server)          Browser/Mobile (client)
 ─────────────────           ─────────────────────
 Build Surface structs  ──→  Receive JSON
 Encode to A2UI JSON    ──→  Render native widgets
-                       ←──  Send userAction JSON
+                       ←──  Send action JSON
 Decode, update state   ──→  Receive updated surface
 ```
 
@@ -133,7 +133,8 @@ Direct protocol types for advanced use cases:
     %A2UI.Component{
       id: "title",
       type: :text,
-      properties: %{text: %A2UI.BoundValue{literal: "Hello!"}}
+      properties: %{text: %A2UI.BoundValue{literal: "Hello!"}},
+      children: []
     }
   ]
 }
@@ -147,7 +148,8 @@ Both layers produce the same structs. Use whichever fits your style.
 |----------|-------|
 | Layout | `:row`, `:column`, `:list` |
 | Display | `:text`, `:image`, `:icon`, `:video`, `:divider` |
-| Interactive | `:button`, `:text_field`, `:checkbox`, `:date_time_input`, `:slider`, `:multiple_choice` |
+| Interactive | `:button`, `:text_field`, `:checkbox`, `:date_time_input`, `:slider`, `:choice_picker` |
+| Media | `:audio_player` |
 | Container | `:card`, `:tabs`, `:modal` |
 
 Custom components are supported via `Builder.custom/4`:
@@ -176,17 +178,18 @@ When the data model updates, bound components update automatically.
 lib/
   a2ui.ex                  # Public API, spec version
   a2ui/
-    component.ex           # Component struct + 17 standard types
+    component.ex           # Component struct + 18 standard types
     surface.ex             # Surface (flat component list + data model)
     bound_value.ex         # Data binding (literal, path, or both)
     action.ex              # User interaction events
     encoder.ex             # Elixir structs → A2UI JSON wire format
-    decoder.ex             # Incoming userAction JSON → Elixir structs
+    decoder.ex             # Incoming action JSON → Elixir structs
     builder.ex             # Pipe-friendly convenience API
     surface_provider.ex    # Behaviour for defining surfaces and handling actions
     socket.ex              # WebSock handler (A2UI message flow)
     endpoint.ex            # Plug endpoint (HTTP + WebSocket routing)
-    server.ex              # OTP supervision tree entry point
+    supervisor.ex          # OTP Supervisor (Registry + Bandit)
+    server.ex              # OTP supervision tree entry point, push API
 priv/
   static/
     index.html             # Built-in debug renderer page
@@ -202,7 +205,7 @@ That's it. No Phoenix, no Ecto, no LiveView.
 
 ```bash
 git config core.hooksPath .githooks   # one-time setup
-mix ci                                # format + compile + test (67 tests)
+mix ci                                # format + compile + test (100 tests)
 ```
 
 ## License

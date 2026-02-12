@@ -198,10 +198,16 @@
 
         ws.onmessage = (event) => {
           try {
-            const msg = JSON.parse(event.data);
-            const type = Object.keys(msg)[0];
-            logMessage(type, msg[type]);
-            handleMessage(type, msg[type]);
+            const data = JSON.parse(event.data);
+            // v0.9: messages arrive as JSON arrays
+            const messages = Array.isArray(data) ? data : [data];
+            messages.forEach(msg => {
+              const type = Object.keys(msg).find(k => k !== 'version');
+              if (type) {
+                logMessage(type, msg[type]);
+                handleMessage(type, msg[type]);
+              }
+            });
           } catch (e) {
             logMessage('error', { raw: event.data, error: e.message });
           }
@@ -210,16 +216,16 @@
 
       function handleMessage(type, payload) {
         switch (type) {
-          case 'surfaceUpdate':
+          case 'updateComponents':
             surfaceId = payload.surfaceId;
             (payload.components || []).forEach(c => { components[c.id] = c; });
             renderSurface();
             break;
-          case 'dataModelUpdate':
+          case 'updateDataModel':
             Object.assign(dataModel, payload.data || {});
             renderSurface();
             break;
-          case 'beginRendering':
+          case 'createSurface':
             rootComponentId = payload.rootComponentId;
             renderSurface();
             break;
@@ -244,22 +250,24 @@
       function renderComponent(parent, id) {
         const comp = components[id];
         if (!comp) return;
-        const [typeName, props] = Object.entries(comp.component)[0];
+        // v0.9: component type is a string discriminator, props at top level
+        const typeName = comp.component;
 
         switch (typeName) {
           case 'Text': {
             const el = document.createElement('div');
             el.className = 'a2ui-text';
-            el.textContent = resolveValue(props.text);
+            el.textContent = resolveValue(comp.text);
             parent.appendChild(el);
             break;
           }
           case 'Button': {
             const btn = document.createElement('button');
             btn.className = 'a2ui-button';
-            btn.textContent = resolveValue(props.label);
-            if (props.action) {
-              btn.onclick = () => sendAction(props.action.name, props.action.context);
+            btn.textContent = resolveValue(comp.label);
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              btn.onclick = () => sendAction(event.name, event.context);
             }
             parent.appendChild(btn);
             break;
@@ -269,14 +277,15 @@
             label.className = 'a2ui-checkbox';
             const input = document.createElement('input');
             input.type = 'checkbox';
-            if (props.checked) input.checked = resolveValue(props.checked) === 'true';
-            if (props.action) {
-              input.onchange = () => sendAction(props.action.name, props.action.context);
+            if (comp.checked) input.checked = resolveValue(comp.checked) === 'true';
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              input.onchange = () => sendAction(event.name, event.context);
             }
             label.appendChild(input);
-            if (props.label) {
+            if (comp.label) {
               const span = document.createElement('span');
-              span.textContent = resolveValue(props.label);
+              span.textContent = resolveValue(comp.label);
               label.appendChild(span);
             }
             parent.appendChild(label);
@@ -285,15 +294,15 @@
           case 'Card': {
             const card = document.createElement('div');
             card.className = 'a2ui-card';
-            if (props.title) {
+            if (comp.title) {
               const title = document.createElement('div');
               title.className = 'a2ui-card-title';
-              title.textContent = resolveValue(props.title);
+              title.textContent = resolveValue(comp.title);
               card.appendChild(title);
             }
             const body = document.createElement('div');
             body.className = 'a2ui-column';
-            (props.children || []).forEach(childId => renderComponent(body, childId));
+            (comp.children || []).forEach(childId => renderComponent(body, childId));
             card.appendChild(body);
             parent.appendChild(card);
             break;
@@ -301,14 +310,14 @@
           case 'Row': {
             const row = document.createElement('div');
             row.className = 'a2ui-row';
-            (props.children || []).forEach(childId => renderComponent(row, childId));
+            (comp.children || []).forEach(childId => renderComponent(row, childId));
             parent.appendChild(row);
             break;
           }
           case 'Column': {
             const col = document.createElement('div');
             col.className = 'a2ui-column';
-            (props.children || []).forEach(childId => renderComponent(col, childId));
+            (comp.children || []).forEach(childId => renderComponent(col, childId));
             parent.appendChild(col);
             break;
           }
@@ -321,26 +330,31 @@
           default: {
             const el = document.createElement('div');
             el.className = 'a2ui-unknown';
-            el.textContent = '[' + typeName + '] ' + JSON.stringify(props, null, 2);
+            el.textContent = '[' + typeName + '] ' + JSON.stringify(comp, null, 2);
             parent.appendChild(el);
           }
         }
       }
 
-      function resolveValue(boundValue) {
-        if (!boundValue) return '';
-        if (boundValue.path && dataModel[boundValue.path] !== undefined) {
-          return String(dataModel[boundValue.path]);
+      function resolveValue(value) {
+        if (value === undefined || value === null) return '';
+        // v0.9: plain string/number → literal value
+        if (typeof value === 'string' || typeof value === 'number') return String(value);
+        // v0.9: {"path": "/..."} → data model lookup
+        if (value.path && dataModel[value.path] !== undefined) {
+          return String(dataModel[value.path]);
         }
-        return boundValue.literalString || '';
+        return '';
       }
 
       function sendAction(name, context) {
-        const msg = { userAction: { action: { name } } };
-        if (context) msg.userAction.action.context = context;
-        const json = JSON.stringify(msg);
-        ws.send(json);
-        logMessage('userAction', { name, context }, true);
+        // v0.9: action with event envelope, wrapped in array
+        const action = { event: { name } };
+        if (context) action.event.context = context;
+        if (surfaceId) action.surfaceId = surfaceId;
+        const msg = JSON.stringify([{ action }]);
+        ws.send(msg);
+        logMessage('action', { name, context }, true);
       }
 
       function logMessage(type, data, outgoing) {

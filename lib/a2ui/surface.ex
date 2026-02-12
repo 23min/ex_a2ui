@@ -33,13 +33,14 @@ defmodule A2UI.Surface do
 
   @type t :: %__MODULE__{
           id: String.t(),
+          catalog_id: String.t() | nil,
           components: [A2UI.Component.t()],
           root_component_id: String.t() | nil,
           data: map()
         }
 
   @enforce_keys [:id]
-  defstruct [:id, :root_component_id, components: [], data: %{}]
+  defstruct [:id, :catalog_id, :root_component_id, components: [], data: %{}]
 
   @doc "Creates a new empty surface."
   @spec new(String.t()) :: t()

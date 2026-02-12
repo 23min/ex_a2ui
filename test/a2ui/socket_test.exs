@@ -66,25 +66,25 @@ defmodule A2UI.SocketTest do
   end
 
   describe "init/1" do
-    test "calls provider and sends initial surface frames" do
+    test "calls provider and sends initial surface as single frame" do
       {:push, frames, state} =
         Socket.init(%{provider: CounterProvider, opts: %{}})
 
       assert %Socket{provider: CounterProvider, provider_state: %{count: 0}} = state
 
-      # surfaceUpdate + beginRendering (no data model)
-      assert length(frames) == 2
+      # v0.9: encode_surface returns a single JSON array, so one frame
+      assert length(frames) == 1
 
-      Enum.each(frames, fn {:text, json} ->
-        assert is_binary(json)
-        assert {:ok, _} = Jason.decode(json)
-      end)
+      {:text, json} = hd(frames)
+      messages = Jason.decode!(json)
+      assert is_list(messages)
 
-      {:text, first} = hd(frames)
-      assert %{"surfaceUpdate" => _} = Jason.decode!(first)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "counter"
+      assert update["version"] == "v0.9"
 
-      {:text, last} = List.last(frames)
-      assert %{"beginRendering" => _} = Jason.decode!(last)
+      create = Enum.find(messages, &Map.has_key?(&1, "createSurface"))
+      assert create["createSurface"]["rootComponentId"] == "main"
     end
 
     test "sends close frame when provider init fails" do
@@ -103,20 +103,29 @@ defmodule A2UI.SocketTest do
       {:ok, state: state}
     end
 
-    test "decodes userAction and calls provider", %{state: state} do
-      json = Jason.encode!(%{"userAction" => %{"action" => %{"name" => "inc"}}})
+    test "decodes v0.9 action and calls provider", %{state: state} do
+      json =
+        Jason.encode!([
+          %{"action" => %{"event" => %{"name" => "inc"}, "surfaceId" => "counter"}}
+        ])
+
       {:push, frames, new_state} = Socket.handle_in({json, [opcode: :text]}, state)
 
       assert new_state.provider_state.count == 1
       assert length(frames) >= 1
 
       {:text, first} = hd(frames)
-      decoded = Jason.decode!(first)
-      assert decoded["surfaceUpdate"]["surfaceId"] == "counter"
+      messages = Jason.decode!(first)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "counter"
     end
 
     test "handles noreply from provider", %{state: state} do
-      json = Jason.encode!(%{"userAction" => %{"action" => %{"name" => "noop"}}})
+      json =
+        Jason.encode!([
+          %{"action" => %{"event" => %{"name" => "noop"}}}
+        ])
+
       {:ok, new_state} = Socket.handle_in({json, [opcode: :text]}, state)
 
       assert new_state.provider_state.count == 0
@@ -144,7 +153,7 @@ defmodule A2UI.SocketTest do
       {:push, _frames, state} =
         Socket.init(%{provider: CounterProvider, opts: %{}})
 
-      json = A2UI.Encoder.data_model_update("counter", %{"/count" => 5})
+      json = A2UI.Encoder.update_data_model("counter", %{"/count" => 5})
       {:push, [frame], ^state} = Socket.handle_info({:push_frame, {:text, json}}, state)
 
       assert {:text, ^json} = frame
@@ -165,11 +174,12 @@ defmodule A2UI.SocketTest do
       {:push, frames, new_state} = Socket.handle_info(:tick, state)
 
       assert new_state.provider_state.count == 1
-      assert length(frames) >= 1
+      assert length(frames) == 1
 
-      {:text, first} = hd(frames)
-      decoded = Jason.decode!(first)
-      assert %{"surfaceUpdate" => %{"surfaceId" => "push-test"}} = decoded
+      {:text, json} = hd(frames)
+      messages = Jason.decode!(json)
+      update = Enum.find(messages, &Map.has_key?(&1, "updateComponents"))
+      assert update["updateComponents"]["surfaceId"] == "push-test"
     end
 
     test "delegates to provider handle_info when implemented — push_data" do
@@ -182,8 +192,8 @@ defmodule A2UI.SocketTest do
         Socket.handle_info({:push_data, "push-test", data}, state)
 
       assert new_state.provider_state == state.provider_state
-      decoded = Jason.decode!(json)
-      assert %{"dataModelUpdate" => %{"surfaceId" => "push-test"}} = decoded
+      [msg] = Jason.decode!(json)
+      assert %{"updateDataModel" => %{"surfaceId" => "push-test"}} = msg
     end
 
     test "delegates to provider handle_info when implemented — noreply" do

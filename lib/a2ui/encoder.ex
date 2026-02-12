@@ -1,15 +1,19 @@
 defmodule A2UI.Encoder do
   @moduledoc """
-  Encodes A2UI Elixir structs into A2UI JSON wire format.
+  Encodes A2UI Elixir structs into v0.9 JSON wire format.
 
   Produces the JSON messages that A2UI renderers (Lit, Angular, Flutter, etc.)
   expect to receive over WebSocket or other transports.
 
+  ## v0.9 wire format
+
+  All messages include `"version": "v0.9"` and are wrapped in JSON arrays.
+
   ## Message types
 
-  - `surface_update/1` — declares or updates components on a surface
-  - `data_model_update/2` — updates data model values (triggers reactive bindings)
-  - `begin_rendering/2` — signals the renderer to construct the UI from a root component
+  - `update_components/1` — declares or updates components on a surface
+  - `update_data_model/2` — updates data model values (triggers reactive bindings)
+  - `create_surface/1` — signals the renderer to construct the UI from a root component
   - `delete_surface/1` — removes a surface
 
   ## Examples
@@ -17,92 +21,130 @@ defmodule A2UI.Encoder do
       surface = A2UI.Builder.surface("status")
       |> A2UI.Builder.text("title", "Hello")
 
-      A2UI.Encoder.surface_update(surface)
-      # => "{\"surfaceUpdate\":{\"surfaceId\":\"status\",\"components\":[...]}}"
+      A2UI.Encoder.update_components(surface)
+      # => "[{\\"updateComponents\\":{\\"surfaceId\\":\\"status\\",\\"components\\":[...]},\\"version\\":\\"v0.9\\"}]"
   """
 
-  @doc "Encodes a surface update message."
-  @spec surface_update(A2UI.Surface.t()) :: String.t()
-  def surface_update(%A2UI.Surface{} = surface) do
+  @version "v0.9"
+
+  @doc "Encodes an updateComponents message."
+  @spec update_components(A2UI.Surface.t()) :: String.t()
+  def update_components(%A2UI.Surface{} = surface) do
     %{
-      "surfaceUpdate" => %{
+      "updateComponents" => %{
         "surfaceId" => surface.id,
         "components" => Enum.map(surface.components, &encode_component/1)
-      }
+      },
+      "version" => @version
     }
-    |> Jason.encode!()
+    |> wrap_array()
   end
 
-  @doc "Encodes a data model update message."
-  @spec data_model_update(String.t(), map()) :: String.t()
-  def data_model_update(surface_id, data) when is_binary(surface_id) and is_map(data) do
+  @doc "Encodes an updateDataModel message."
+  @spec update_data_model(String.t(), map()) :: String.t()
+  def update_data_model(surface_id, data) when is_binary(surface_id) and is_map(data) do
     %{
-      "dataModelUpdate" => %{
+      "updateDataModel" => %{
         "surfaceId" => surface_id,
         "data" => data
-      }
+      },
+      "version" => @version
     }
-    |> Jason.encode!()
+    |> wrap_array()
   end
 
-  @doc "Encodes a begin rendering message."
-  @spec begin_rendering(String.t(), String.t(), keyword()) :: String.t()
-  def begin_rendering(surface_id, root_component_id, opts \\ []) do
+  @doc "Encodes a createSurface message."
+  @spec create_surface(A2UI.Surface.t()) :: String.t()
+  def create_surface(%A2UI.Surface{} = surface) do
     msg = %{
-      "surfaceId" => surface_id,
-      "rootComponentId" => root_component_id
+      "surfaceId" => surface.id,
+      "rootComponentId" => surface.root_component_id || "root"
     }
 
     msg =
-      case Keyword.get(opts, :catalog_id) do
+      case surface.catalog_id do
         nil -> msg
         catalog_id -> Map.put(msg, "catalogId", catalog_id)
       end
 
-    %{"beginRendering" => msg}
-    |> Jason.encode!()
+    %{"createSurface" => msg, "version" => @version}
+    |> wrap_array()
   end
 
-  @doc "Encodes a delete surface message."
+  @doc "Encodes a deleteSurface message."
   @spec delete_surface(String.t()) :: String.t()
   def delete_surface(surface_id) when is_binary(surface_id) do
-    %{"deleteSurface" => %{"surfaceId" => surface_id}}
-    |> Jason.encode!()
+    %{
+      "deleteSurface" => %{"surfaceId" => surface_id},
+      "version" => @version
+    }
+    |> wrap_array()
   end
 
   @doc """
-  Encodes a full surface into the sequence of messages a renderer needs:
-  surface update, optional data model update, and begin rendering.
+  Encodes a full surface into a single JSON array containing all messages
+  a renderer needs: updateComponents, optional updateDataModel, and createSurface.
 
-  Returns a list of JSON strings.
+  Returns a single JSON string (v0.9 message array).
   """
-  @spec encode_surface(A2UI.Surface.t()) :: [String.t()]
+  @spec encode_surface(A2UI.Surface.t()) :: String.t()
   def encode_surface(%A2UI.Surface{} = surface) do
-    messages = [surface_update(surface)]
+    messages = [
+      %{
+        "updateComponents" => %{
+          "surfaceId" => surface.id,
+          "components" => Enum.map(surface.components, &encode_component/1)
+        },
+        "version" => @version
+      }
+    ]
 
     messages =
       if map_size(surface.data) > 0 do
-        messages ++ [data_model_update(surface.id, surface.data)]
+        messages ++
+          [
+            %{
+              "updateDataModel" => %{
+                "surfaceId" => surface.id,
+                "data" => surface.data
+              },
+              "version" => @version
+            }
+          ]
       else
         messages
       end
 
-    case surface.root_component_id do
-      nil -> messages
-      root_id -> messages ++ [begin_rendering(surface.id, root_id)]
-    end
+    messages =
+      case surface.root_component_id do
+        nil ->
+          messages
+
+        root_id ->
+          create = %{"surfaceId" => surface.id, "rootComponentId" => root_id}
+
+          create =
+            case surface.catalog_id do
+              nil -> create
+              catalog_id -> Map.put(create, "catalogId", catalog_id)
+            end
+
+          messages ++ [%{"createSurface" => create, "version" => @version}]
+      end
+
+    Jason.encode!(messages)
   end
 
   # --- Internal encoding ---
 
   @doc false
   def encode_component(%A2UI.Component{} = comp) do
-    %{
+    base = %{
       "id" => comp.id,
-      "component" => %{
-        encode_type_key(comp.type) => encode_properties(comp.properties)
-      }
+      "component" => encode_type_key(comp.type)
     }
+
+    encode_properties_to_top_level(base, comp.properties)
   end
 
   defp encode_type_key(:text), do: "Text"
@@ -111,10 +153,11 @@ defmodule A2UI.Encoder do
   defp encode_type_key(:checkbox), do: "CheckBox"
   defp encode_type_key(:date_time_input), do: "DateTimeInput"
   defp encode_type_key(:slider), do: "Slider"
-  defp encode_type_key(:multiple_choice), do: "MultipleChoice"
+  defp encode_type_key(:choice_picker), do: "ChoicePicker"
   defp encode_type_key(:image), do: "Image"
   defp encode_type_key(:icon), do: "Icon"
   defp encode_type_key(:video), do: "Video"
+  defp encode_type_key(:audio_player), do: "AudioPlayer"
   defp encode_type_key(:divider), do: "Divider"
   defp encode_type_key(:row), do: "Row"
   defp encode_type_key(:column), do: "Column"
@@ -124,35 +167,42 @@ defmodule A2UI.Encoder do
   defp encode_type_key(:modal), do: "Modal"
   defp encode_type_key({:custom, name}), do: Atom.to_string(name)
 
-  defp encode_properties(props) when is_map(props) do
-    Map.new(props, fn {key, value} ->
-      {encode_property_key(key), encode_property_value(value)}
+  defp encode_properties_to_top_level(base, props) when is_map(props) do
+    Enum.reduce(props, base, fn {key, value}, acc ->
+      Map.put(acc, encode_property_key(key), encode_property_value(value))
     end)
   end
 
   defp encode_property_key(key) when is_atom(key), do: to_camel_case(Atom.to_string(key))
   defp encode_property_key(key) when is_binary(key), do: key
 
+  # v0.9: path-only → {"path": "..."}
   defp encode_property_value(%A2UI.BoundValue{literal: nil, path: path}) when not is_nil(path) do
     %{"path" => path}
   end
 
+  # v0.9: literal-only → plain value (no literalString wrapper)
   defp encode_property_value(%A2UI.BoundValue{literal: lit, path: nil}) do
-    %{"literalString" => to_string(lit)}
+    lit
   end
 
-  defp encode_property_value(%A2UI.BoundValue{literal: lit, path: path}) do
-    %{"literalString" => to_string(lit), "path" => path}
+  # v0.9: both set → use path (literal+path "both" mode removed in v0.9)
+  defp encode_property_value(%A2UI.BoundValue{path: path}) when not is_nil(path) do
+    %{"path" => path}
   end
 
+  # v0.9: action → {"event": {"name": "...", "context": {...}}}
   defp encode_property_value(%A2UI.Action{} = action) do
-    encoded = %{"name" => action.name}
+    event = %{"name" => action.name}
 
-    case action.context do
-      nil -> encoded
-      ctx when map_size(ctx) == 0 -> encoded
-      ctx -> Map.put(encoded, "context", encode_properties(ctx))
-    end
+    event =
+      case action.context do
+        nil -> event
+        ctx when map_size(ctx) == 0 -> event
+        ctx -> Map.put(event, "context", encode_context(ctx))
+      end
+
+    %{"event" => event}
   end
 
   defp encode_property_value(list) when is_list(list) do
@@ -163,6 +213,16 @@ defmodule A2UI.Encoder do
   defp encode_property_value(value) when is_number(value), do: value
   defp encode_property_value(value) when is_boolean(value), do: value
   defp encode_property_value(value) when is_atom(value), do: Atom.to_string(value)
+
+  defp encode_context(ctx) when is_map(ctx) do
+    Map.new(ctx, fn {key, value} ->
+      {encode_property_key(key), encode_property_value(value)}
+    end)
+  end
+
+  defp wrap_array(message) do
+    Jason.encode!([message])
+  end
 
   defp to_camel_case(string) do
     [first | rest] = String.split(string, "_")

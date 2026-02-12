@@ -90,7 +90,7 @@ defmodule A2UI.Server do
   @spec push_data(String.t(), map(), keyword()) :: :ok
   def push_data(surface_id, data, opts) do
     registry = resolve_registry(opts)
-    json = A2UI.Encoder.data_model_update(surface_id, data)
+    json = A2UI.Encoder.update_data_model(surface_id, data)
     dispatch(registry, surface_id, {:push_frame, {:text, json}})
   end
 
@@ -109,8 +109,8 @@ defmodule A2UI.Server do
   @spec push_surface(A2UI.Surface.t(), keyword()) :: :ok
   def push_surface(%A2UI.Surface{} = surface, opts) do
     registry = resolve_registry(opts)
-    frames = surface |> A2UI.Encoder.encode_surface() |> Enum.map(&{:text, &1})
-    dispatch(registry, surface.id, {:push_frames, frames})
+    json = A2UI.Encoder.encode_surface(surface)
+    dispatch(registry, surface.id, {:push_frame, {:text, json}})
   end
 
   @doc """
