@@ -140,6 +140,86 @@ defmodule A2UI.BuilderTest do
     end
   end
 
+  describe "date_time_input component" do
+    test "adds date_time_input with binding and action" do
+      s = Builder.surface("test") |> Builder.date_time_input("dt", bind: "/date", action: "pick")
+
+      comp = Surface.get_component(s, "dt")
+      assert comp.type == :date_time_input
+      assert comp.properties.value == %BoundValue{path: "/date"}
+      assert comp.properties.action == %Action{name: "pick"}
+    end
+  end
+
+  describe "choice_picker component" do
+    test "adds choice_picker with options and binding" do
+      opts = [%{label: "Red", value: "r"}, %{label: "Blue", value: "b"}]
+
+      s =
+        Builder.surface("test")
+        |> Builder.choice_picker("cp", options: opts, bind: "/color", action: "select")
+
+      comp = Surface.get_component(s, "cp")
+      assert comp.type == :choice_picker
+      assert comp.properties.value == %BoundValue{path: "/color"}
+      assert comp.properties.options == opts
+      assert comp.properties.action == %Action{name: "select"}
+    end
+  end
+
+  describe "icon component" do
+    test "adds icon with literal name" do
+      s = Builder.surface("test") |> Builder.icon("i", "star")
+
+      comp = Surface.get_component(s, "i")
+      assert comp.type == :icon
+      assert comp.properties.icon == %BoundValue{literal: "star"}
+    end
+  end
+
+  describe "video component" do
+    test "adds video with literal src" do
+      s = Builder.surface("test") |> Builder.video("v", "https://example.com/video.mp4")
+
+      comp = Surface.get_component(s, "v")
+      assert comp.type == :video
+      assert comp.properties.src == %BoundValue{literal: "https://example.com/video.mp4"}
+    end
+  end
+
+  describe "audio_player component" do
+    test "adds audio_player with literal src" do
+      s = Builder.surface("test") |> Builder.audio_player("a", "https://example.com/audio.mp3")
+
+      comp = Surface.get_component(s, "a")
+      assert comp.type == :audio_player
+      assert comp.properties.src == %BoundValue{literal: "https://example.com/audio.mp3"}
+    end
+  end
+
+  describe "list component" do
+    test "adds list with children" do
+      s = Builder.surface("test") |> Builder.list("l", children: ["a", "b", "c"])
+
+      comp = Surface.get_component(s, "l")
+      assert comp.type == :list
+      assert comp.properties.children == ["a", "b", "c"]
+    end
+  end
+
+  describe "tabs component" do
+    test "adds tabs with title and children" do
+      s =
+        Builder.surface("test")
+        |> Builder.tabs("t", title: "Settings", children: ["tab1", "tab2"])
+
+      comp = Surface.get_component(s, "t")
+      assert comp.type == :tabs
+      assert comp.properties.title == %BoundValue{literal: "Settings"}
+      assert comp.properties.children == ["tab1", "tab2"]
+    end
+  end
+
   describe "custom component" do
     test "adds custom typed component" do
       s = Builder.surface("test") |> Builder.custom(:graph, "g", nodes: [], edges: [])

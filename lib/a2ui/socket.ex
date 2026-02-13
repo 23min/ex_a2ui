@@ -51,6 +51,11 @@ defmodule A2UI.Socket do
           registry: registry
         }
 
+        :telemetry.execute([:a2ui, :socket, :init], %{}, %{
+          provider: provider,
+          surface_id: surface.id
+        })
+
         {:push, [frame], state}
 
       {:error, reason} ->
@@ -89,30 +94,37 @@ defmodule A2UI.Socket do
 
   def handle_info(msg, %__MODULE__{provider: provider} = state) do
     if function_exported?(provider, :handle_info, 2) do
-      case provider.handle_info(msg, state.provider_state) do
-        {:noreply, new_provider_state} ->
-          {:ok, %{state | provider_state: new_provider_state}}
+      try do
+        case provider.handle_info(msg, state.provider_state) do
+          {:noreply, new_provider_state} ->
+            {:ok, %{state | provider_state: new_provider_state}}
 
-        {:push_data, surface_id, data, new_provider_state} ->
-          json = A2UI.Encoder.update_data_model(surface_id, data)
-          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+          {:push_data, surface_id, data, new_provider_state} ->
+            json = A2UI.Encoder.update_data_model(surface_id, data)
+            {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
 
-        {:push_surface, %A2UI.Surface{} = surface, new_provider_state} ->
-          json = A2UI.Encoder.encode_surface(surface)
-          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+          {:push_surface, %A2UI.Surface{} = surface, new_provider_state} ->
+            json = A2UI.Encoder.encode_surface(surface)
+            {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
 
-        {:push_data_path, surface_id, path, value, new_provider_state} ->
-          json = A2UI.Encoder.update_data_model_path(surface_id, path, value)
-          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+          {:push_data_path, surface_id, path, value, new_provider_state} ->
+            json = A2UI.Encoder.update_data_model_path(surface_id, path, value)
+            {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
 
-        {:delete_data_path, surface_id, path, new_provider_state} ->
-          json = A2UI.Encoder.delete_data_model_path(surface_id, path)
-          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+          {:delete_data_path, surface_id, path, new_provider_state} ->
+            json = A2UI.Encoder.delete_data_model_path(surface_id, path)
+            {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
 
-        other ->
-          Logger.warning(
-            "A2UI.Socket: invalid handle_info return from #{inspect(provider)}: #{inspect(other)}"
-          )
+          other ->
+            Logger.warning(
+              "A2UI.Socket: invalid handle_info return from #{inspect(provider)}: #{inspect(other)}"
+            )
+
+            {:ok, state}
+        end
+      rescue
+        e ->
+          Logger.error("A2UI.Socket: provider.handle_info crashed: #{Exception.message(e)}")
 
           {:ok, state}
       end
@@ -123,7 +135,13 @@ defmodule A2UI.Socket do
   end
 
   @impl WebSock
-  def terminate(reason, %__MODULE__{} = _state) do
+  def terminate(reason, %__MODULE__{} = state) do
+    :telemetry.execute([:a2ui, :socket, :terminate], %{}, %{
+      provider: state.provider,
+      surface_id: state.surface_id,
+      reason: reason
+    })
+
     Logger.debug("A2UI.Socket: connection closed: #{inspect(reason)}")
     :ok
   end
@@ -154,25 +172,45 @@ defmodule A2UI.Socket do
   end
 
   defp handle_provider_action(action, %__MODULE__{provider: provider} = state) do
-    case provider.handle_action(action, state.provider_state) do
-      {:noreply, new_provider_state} ->
-        {:ok, %{state | provider_state: new_provider_state}}
+    :telemetry.execute([:a2ui, :socket, :action], %{}, %{
+      provider: provider,
+      surface_id: state.surface_id,
+      action_name: action.name
+    })
 
-      {:reply, %A2UI.Surface{} = surface, new_provider_state} ->
-        json = A2UI.Encoder.encode_surface(surface)
-        {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+    try do
+      case provider.handle_action(action, state.provider_state) do
+        {:noreply, new_provider_state} ->
+          {:ok, %{state | provider_state: new_provider_state}}
+
+        {:reply, %A2UI.Surface{} = surface, new_provider_state} ->
+          json = A2UI.Encoder.encode_surface(surface)
+          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+      end
+    rescue
+      e ->
+        Logger.error("A2UI.Socket: provider.handle_action crashed: #{Exception.message(e)}")
+
+        {:ok, state}
     end
   end
 
   defp handle_provider_error(error, %__MODULE__{provider: provider} = state) do
     if function_exported?(provider, :handle_error, 2) do
-      case provider.handle_error(error, state.provider_state) do
-        {:noreply, new_provider_state} ->
-          {:ok, %{state | provider_state: new_provider_state}}
+      try do
+        case provider.handle_error(error, state.provider_state) do
+          {:noreply, new_provider_state} ->
+            {:ok, %{state | provider_state: new_provider_state}}
 
-        {:push_surface, %A2UI.Surface{} = surface, new_provider_state} ->
-          json = A2UI.Encoder.encode_surface(surface)
-          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+          {:push_surface, %A2UI.Surface{} = surface, new_provider_state} ->
+            json = A2UI.Encoder.encode_surface(surface)
+            {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+        end
+      rescue
+        e ->
+          Logger.error("A2UI.Socket: provider.handle_error crashed: #{Exception.message(e)}")
+
+          {:ok, state}
       end
     else
       Logger.debug("A2UI.Socket: unhandled client error: #{inspect(error)}")

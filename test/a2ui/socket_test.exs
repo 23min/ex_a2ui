@@ -122,6 +122,36 @@ defmodule A2UI.SocketTest do
     end
   end
 
+  defmodule CrashProvider do
+    @behaviour A2UI.SurfaceProvider
+
+    alias A2UI.Builder, as: UI
+
+    @impl true
+    def init(opts), do: {:ok, Map.merge(%{count: 0}, opts)}
+
+    @impl true
+    def surface(_state) do
+      UI.surface("crash-test")
+      |> UI.text("msg", "OK")
+      |> UI.root("msg")
+    end
+
+    @impl true
+    def handle_action(%A2UI.Action{name: "crash"}, _state) do
+      raise "intentional crash"
+    end
+
+    def handle_action(_, state), do: {:noreply, state}
+
+    @impl true
+    def handle_info(:crash, _state) do
+      raise "intentional info crash"
+    end
+
+    def handle_info(_, state), do: {:noreply, state}
+  end
+
   describe "init/1" do
     test "calls provider and sends initial surface as single frame" do
       {:push, frames, state} =
@@ -328,6 +358,87 @@ defmodule A2UI.SocketTest do
     end
   end
 
+  describe "telemetry" do
+    test "emits :init event on connection" do
+      ref = make_ref()
+      parent = self()
+
+      handler = fn event, measurements, metadata, _config ->
+        send(parent, {ref, event, measurements, metadata})
+      end
+
+      :telemetry.attach(
+        "test-socket-init-#{inspect(ref)}",
+        [:a2ui, :socket, :init],
+        handler,
+        nil
+      )
+
+      {:push, _frames, _state} =
+        Socket.init(%{provider: CounterProvider, opts: %{}})
+
+      assert_receive {^ref, [:a2ui, :socket, :init], %{},
+                      %{provider: CounterProvider, surface_id: "counter"}}
+
+      :telemetry.detach("test-socket-init-#{inspect(ref)}")
+    end
+
+    test "emits :action event on action received" do
+      ref = make_ref()
+      parent = self()
+
+      handler = fn event, measurements, metadata, _config ->
+        send(parent, {ref, event, measurements, metadata})
+      end
+
+      :telemetry.attach(
+        "test-socket-action-#{inspect(ref)}",
+        [:a2ui, :socket, :action],
+        handler,
+        nil
+      )
+
+      {:push, _frames, state} =
+        Socket.init(%{provider: CounterProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{"action" => %{"event" => %{"name" => "inc"}, "surfaceId" => "counter"}}
+        ])
+
+      {:push, _frames, _new_state} = Socket.handle_in({json, [opcode: :text]}, state)
+
+      assert_receive {^ref, [:a2ui, :socket, :action], %{}, %{action_name: "inc"}}
+
+      :telemetry.detach("test-socket-action-#{inspect(ref)}")
+    end
+
+    test "emits :terminate event on disconnect" do
+      ref = make_ref()
+      parent = self()
+
+      handler = fn event, measurements, metadata, _config ->
+        send(parent, {ref, event, measurements, metadata})
+      end
+
+      :telemetry.attach(
+        "test-socket-terminate-#{inspect(ref)}",
+        [:a2ui, :socket, :terminate],
+        handler,
+        nil
+      )
+
+      {:push, _frames, state} =
+        Socket.init(%{provider: CounterProvider, opts: %{}})
+
+      Socket.terminate(:normal, state)
+
+      assert_receive {^ref, [:a2ui, :socket, :terminate], %{}, %{reason: :normal}}
+
+      :telemetry.detach("test-socket-terminate-#{inspect(ref)}")
+    end
+  end
+
   describe "handle_in/2 with error messages" do
     test "routes error to provider handle_error — noreply" do
       {:push, _frames, state} =
@@ -389,6 +500,29 @@ defmodule A2UI.SocketTest do
 
       {:ok, new_state} = Socket.handle_in({json, [opcode: :text]}, state)
       assert length(new_state.provider_state.errors) == 1
+    end
+  end
+
+  describe "graceful error handling" do
+    test "provider crash in handle_action does not propagate" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: CrashProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{"action" => %{"event" => %{"name" => "crash"}, "surfaceId" => "crash-test"}}
+        ])
+
+      {:ok, same_state} = Socket.handle_in({json, [opcode: :text]}, state)
+      assert same_state.provider_state.count == 0
+    end
+
+    test "provider crash in handle_info does not propagate" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: CrashProvider, opts: %{}})
+
+      {:ok, same_state} = Socket.handle_info(:crash, state)
+      assert same_state.provider_state.count == 0
     end
   end
 end

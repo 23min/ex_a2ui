@@ -44,10 +44,9 @@ mix run demo_server.exs   # runnable demo (http://localhost:4000)
 - `A2UI.CheckRule` — input validation rules
 - `A2UI.Theme` — surface theming (primaryColor, iconUrl, agentDisplayName)
 - `A2UI.Encoder` — structs → v0.9 JSON wire format (array-wrapped, versioned)
+- `A2UI.Decoder` — incoming v0.9 action/error JSON → structs
 - `A2UI.Error` — client error message struct
 - `A2UI.Catalog` — custom component type registry and validation
-- `A2UI.Encoder` — structs → v0.9 JSON wire format (array-wrapped, versioned)
-- `A2UI.Decoder` — incoming v0.9 action/error JSON → structs
 - `A2UI.Builder` — pipe-friendly convenience API
 - `A2UI.Server` — starts WebSocket server (Bandit), push API
 - `A2UI.Socket` — WebSock handler, bridges WS to SurfaceProvider
@@ -58,7 +57,7 @@ mix run demo_server.exs   # runnable demo (http://localhost:4000)
 
 ## Current State
 
-**v0.5.0** — protocol completeness (all 14 standard functions, client errors, SSE transport, catalog). 220 tests.
+**v0.6.0** — demo parity & production hardening. Complete Builder (all 18 types), complete debug renderer, 5 demo providers, telemetry instrumentation, graceful error handling. 232 tests.
 
 ## Pre-commit Hook
 

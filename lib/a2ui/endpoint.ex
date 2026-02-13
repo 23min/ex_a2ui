@@ -38,17 +38,27 @@ defmodule A2UI.Endpoint do
 
   @impl Plug
   def call(%{path_info: ["ws"]} = conn, config) do
+    conn = Plug.Conn.fetch_query_params(conn)
+    opts = Map.merge(config.provider_opts, %{query_params: conn.query_params})
+
     conn
     |> WebSockAdapter.upgrade(
       A2UI.Socket,
-      %{provider: config.provider, opts: config.provider_opts, registry: config.registry},
+      %{provider: config.provider, opts: opts, registry: config.registry},
       timeout: 60_000
     )
     |> halt()
   end
 
   def call(%{path_info: ["sse"]} = conn, config) do
-    A2UI.SSE.call(conn, config)
+    conn = Plug.Conn.fetch_query_params(conn)
+
+    sse_config = %{
+      config
+      | provider_opts: Map.merge(config.provider_opts, %{query_params: conn.query_params})
+    }
+
+    A2UI.SSE.call(conn, sse_config)
   end
 
   def call(%{path_info: []} = conn, _config) do

@@ -151,21 +151,11 @@ FunctionCall, TemplateChildList, CheckRule, Theme, sendDataModel, path-level dat
 
 All 14 standard function helpers. Client error messages with `handle_error/2` callback. SSE transport adapter. Custom component catalog with validation. 220 tests.
 
-### v0.6.0 — Demo Parity & Production Hardening
+### v0.6.0 — Demo Parity & Production Hardening ✅
 
-**Demo agents** (parity with a2ui-blazor's 5 agents):
-- Component gallery — showcase all 18 standard component types
-- Data binding demo — reactive updates, formatString interpolation
-- Form + validation demo — input components with CheckRule
-- Push/streaming demo — timer-based updates, live data
-- Custom component demo
+Complete Builder helpers (all 18 types). Complete debug renderer (all 18 types). 5 demo providers. Telemetry instrumentation. Graceful error handling. 232 tests.
 
-**Production hardening:**
-- Connection management (reconnection, state recovery)
-- Multi-surface management (surface switching, lifecycle)
-- Error handling and graceful degradation
-- Performance optimization for large surfaces
-- Telemetry integration for observability
+Deferred to future: Multi-surface management, reconnection/state recovery, performance optimization.
 
 ### Future Considerations
 
@@ -177,7 +167,7 @@ All 14 standard function helpers. Client error messages with `handle_error/2` ca
 
 ## Dependencies
 
-### Current (v0.5.0)
+### Current (v0.6.0)
 
 ```elixir
 {:jason, "~> 1.4"}            # JSON encoding/decoding
