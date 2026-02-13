@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/) and uses
 [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [0.5.0] - 2026-02-12
+
+### Added
+
+- **All 14 standard function helpers** — `numeric/1`, `email/1`, `format_number/1`, `format_currency/2`, `format_date/2`, `pluralize/3`, `fn_and/1`, `fn_or/1`, `fn_not/1` on both `FunctionCall` and `Builder` (was 5, now 14)
+- **Client error messages** — `A2UI.Error` struct, decoder support for `error` messages from clients (`VALIDATION_FAILED`, generic errors)
+- **`handle_error/2` callback** — optional callback on `SurfaceProvider` for reacting to client-reported errors
+- **SSE transport adapter** — `A2UI.SSE` provides Server-Sent Events at `GET /sse` for push-only scenarios (dashboards, monitoring)
+- **Custom component catalog** — `A2UI.Catalog` for registering and validating custom component types with property specs
+- `Builder.catalog_id/2` — accepts string or `%Catalog{}` struct
+
+### Changed
+
+- `A2UI.Endpoint` now routes `/sse` to SSE adapter alongside existing `/ws` WebSocket
+- `A2UI.Decoder` handles both `action` and `error` message types
+- `A2UI.Socket` routes decoded error messages to provider's `handle_error/2`
+- 220 tests (was 162)
+
+### Fixed
+
+- `mix.exs` version corrected from `"0.3.0"` to `"0.5.0"` (was never bumped for v0.4.0)
+
+## [0.4.0] - 2026-02-12
+
+### Added
+
+- **FunctionCall** — client-evaluated computed values (`formatString`, `openUrl`, `required`, `regex`, `length`)
+- **TemplateChildList** — data-driven children from data arrays
+- **CheckRule** — input validation rules with `required`, `max_length`, `regex` helpers
+- **Theme** — surface theming (`primaryColor`, `iconUrl`, `agentDisplayName`)
+- **sendDataModel flag** — tells client to include full data model with actions
+- **Path-level data operations** — `push_data_path/4` and `delete_data_path/3` on Server
+- Builder helpers for all new features
+
+### Changed
+
+- Debug renderer updated for FunctionCall display, path-level data ops, theme application, TemplateChildList
+- 162 tests (was 100)
+
 ## [0.3.0] - 2026-02-12
 
 ### Breaking Changes
@@ -92,6 +131,8 @@ This project follows [Semantic Versioning](https://semver.org/) and uses
 - Runnable demo (`mix run demo.exs`)
 - 43 tests
 
+[0.5.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.5.0
+[0.4.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.4.0
 [0.3.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.3.0
 [0.2.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.2.0
 [0.1.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.1.0

@@ -95,4 +95,70 @@ defmodule A2UI.FunctionCall do
     args = if opts[:max], do: Map.put(args, "max", opts[:max]), else: args
     %__MODULE__{call: "length", args: args, return_type: "boolean"}
   end
+
+  @doc "Creates a `numeric` validation function call."
+  @spec numeric(term()) :: t()
+  def numeric(value_ref) do
+    %__MODULE__{call: "numeric", args: %{"value" => value_ref}, return_type: "boolean"}
+  end
+
+  @doc "Creates an `email` validation function call."
+  @spec email(term()) :: t()
+  def email(value_ref) do
+    %__MODULE__{call: "email", args: %{"value" => value_ref}, return_type: "boolean"}
+  end
+
+  @doc "Creates a `formatNumber` function call."
+  @spec format_number(term()) :: t()
+  def format_number(value_ref) do
+    %__MODULE__{call: "formatNumber", args: %{"value" => value_ref}, return_type: "string"}
+  end
+
+  @doc "Creates a `formatCurrency` function call."
+  @spec format_currency(term(), String.t()) :: t()
+  def format_currency(value_ref, currency_code) when is_binary(currency_code) do
+    %__MODULE__{
+      call: "formatCurrency",
+      args: %{"value" => value_ref, "currencyCode" => currency_code},
+      return_type: "string"
+    }
+  end
+
+  @doc "Creates a `formatDate` function call."
+  @spec format_date(term(), String.t()) :: t()
+  def format_date(value_ref, format) when is_binary(format) do
+    %__MODULE__{
+      call: "formatDate",
+      args: %{"value" => value_ref, "format" => format},
+      return_type: "string"
+    }
+  end
+
+  @doc "Creates a `pluralize` function call."
+  @spec pluralize(term(), term(), term()) :: t()
+  def pluralize(count, singular, plural) do
+    %__MODULE__{
+      call: "pluralize",
+      args: %{"count" => count, "singular" => singular, "plural" => plural},
+      return_type: "string"
+    }
+  end
+
+  @doc "Creates an `and` logic function call."
+  @spec fn_and(list()) :: t()
+  def fn_and(conditions) when is_list(conditions) do
+    %__MODULE__{call: "and", args: %{"conditions" => conditions}, return_type: "boolean"}
+  end
+
+  @doc "Creates an `or` logic function call."
+  @spec fn_or(list()) :: t()
+  def fn_or(conditions) when is_list(conditions) do
+    %__MODULE__{call: "or", args: %{"conditions" => conditions}, return_type: "boolean"}
+  end
+
+  @doc "Creates a `not` logic function call."
+  @spec fn_not(term()) :: t()
+  def fn_not(condition) do
+    %__MODULE__{call: "not", args: %{"condition" => condition}, return_type: "boolean"}
+  end
 end

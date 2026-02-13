@@ -108,5 +108,27 @@ defmodule A2UI.SurfaceProvider do
               | {:push_data, String.t(), map(), state()}
               | {:push_surface, A2UI.Surface.t(), state()}
 
-  @optional_callbacks [handle_info: 2]
+  @doc """
+  Handle a client error message.
+
+  This is **optional**. Implement it to react to client-reported errors
+  such as validation failures.
+
+  Return values:
+
+  - `{:noreply, state}` — acknowledge, send nothing to client
+  - `{:push_surface, surface, state}` — send an updated surface in response
+
+  ## Example
+
+      def handle_error(%A2UI.Error{type: "VALIDATION_FAILED", path: path}, state) do
+        Logger.warning("Validation failed at \#{path}")
+        {:noreply, state}
+      end
+  """
+  @callback handle_error(A2UI.Error.t(), state()) ::
+              {:noreply, state()}
+              | {:push_surface, A2UI.Surface.t(), state()}
+
+  @optional_callbacks [handle_info: 2, handle_error: 2]
 end

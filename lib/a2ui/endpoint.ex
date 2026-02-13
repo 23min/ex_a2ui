@@ -1,9 +1,10 @@
 defmodule A2UI.Endpoint do
   @moduledoc """
-  Plug endpoint for A2UI HTTP and WebSocket connections.
+  Plug endpoint for A2UI HTTP, WebSocket, and SSE connections.
 
   Routes:
   - `GET /ws` — WebSocket upgrade (A2UI protocol)
+  - `GET /sse` — Server-Sent Events stream (push-only)
   - `GET /` — serves the default A2UI renderer page
   - Static assets from `priv/static/`
 
@@ -44,6 +45,10 @@ defmodule A2UI.Endpoint do
       timeout: 60_000
     )
     |> halt()
+  end
+
+  def call(%{path_info: ["sse"]} = conn, config) do
+    A2UI.SSE.call(conn, config)
   end
 
   def call(%{path_info: []} = conn, _config) do

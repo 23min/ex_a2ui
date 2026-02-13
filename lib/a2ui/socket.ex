@@ -139,6 +139,15 @@ defmodule A2UI.Socket do
           {:push, new_frames, new_state} -> {:push, frames ++ new_frames, new_state}
         end
 
+      {:error, error, _metadata}, {:ok, acc_state} ->
+        handle_provider_error(error, acc_state)
+
+      {:error, error, _metadata}, {:push, frames, acc_state} ->
+        case handle_provider_error(error, acc_state) do
+          {:ok, new_state} -> {:push, frames, new_state}
+          {:push, new_frames, new_state} -> {:push, frames ++ new_frames, new_state}
+        end
+
       _, acc ->
         acc
     end)
@@ -152,6 +161,22 @@ defmodule A2UI.Socket do
       {:reply, %A2UI.Surface{} = surface, new_provider_state} ->
         json = A2UI.Encoder.encode_surface(surface)
         {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+    end
+  end
+
+  defp handle_provider_error(error, %__MODULE__{provider: provider} = state) do
+    if function_exported?(provider, :handle_error, 2) do
+      case provider.handle_error(error, state.provider_state) do
+        {:noreply, new_provider_state} ->
+          {:ok, %{state | provider_state: new_provider_state}}
+
+        {:push_surface, %A2UI.Surface{} = surface, new_provider_state} ->
+          json = A2UI.Encoder.encode_surface(surface)
+          {:push, [{:text, json}], %{state | provider_state: new_provider_state}}
+      end
+    else
+      Logger.debug("A2UI.Socket: unhandled client error: #{inspect(error)}")
+      {:ok, state}
     end
   end
 end

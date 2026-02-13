@@ -73,6 +73,55 @@ defmodule A2UI.SocketTest do
     end
   end
 
+  defmodule ErrorProvider do
+    @behaviour A2UI.SurfaceProvider
+
+    alias A2UI.Builder, as: UI
+
+    @impl true
+    def init(opts), do: {:ok, Map.merge(%{errors: []}, opts)}
+
+    @impl true
+    def surface(_state) do
+      UI.surface("error-test")
+      |> UI.text("msg", "OK")
+      |> UI.root("msg")
+    end
+
+    @impl true
+    def handle_action(_, state), do: {:noreply, state}
+
+    @impl true
+    def handle_error(%A2UI.Error{} = error, state) do
+      new_state = %{state | errors: [error | state.errors]}
+      {:noreply, new_state}
+    end
+  end
+
+  defmodule ErrorPushProvider do
+    @behaviour A2UI.SurfaceProvider
+
+    alias A2UI.Builder, as: UI
+
+    @impl true
+    def init(opts), do: {:ok, Map.merge(%{}, opts)}
+
+    @impl true
+    def surface(_state) do
+      UI.surface("error-push-test")
+      |> UI.text("msg", "OK")
+      |> UI.root("msg")
+    end
+
+    @impl true
+    def handle_action(_, state), do: {:noreply, state}
+
+    @impl true
+    def handle_error(%A2UI.Error{}, state) do
+      {:push_surface, surface(state), state}
+    end
+  end
+
   describe "init/1" do
     test "calls provider and sends initial surface as single frame" do
       {:push, frames, state} =
@@ -276,6 +325,70 @@ defmodule A2UI.SocketTest do
       assert length(entries) == 1
       {pid, _value} = hd(entries)
       assert pid == self()
+    end
+  end
+
+  describe "handle_in/2 with error messages" do
+    test "routes error to provider handle_error — noreply" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: ErrorProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{
+            "error" => %{
+              "type" => "VALIDATION_FAILED",
+              "path" => "/form/email",
+              "message" => "Invalid"
+            }
+          }
+        ])
+
+      {:ok, new_state} = Socket.handle_in({json, [opcode: :text]}, state)
+      assert length(new_state.provider_state.errors) == 1
+      assert hd(new_state.provider_state.errors).type == "VALIDATION_FAILED"
+    end
+
+    test "routes error to provider handle_error — push_surface" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: ErrorPushProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{"error" => %{"type" => "VALIDATION_FAILED", "path" => "/field"}}
+        ])
+
+      {:push, frames, _new_state} = Socket.handle_in({json, [opcode: :text]}, state)
+      assert length(frames) >= 1
+      {:text, response_json} = hd(frames)
+      messages = Jason.decode!(response_json)
+      assert Enum.any?(messages, &Map.has_key?(&1, "updateComponents"))
+    end
+
+    test "ignores errors when provider has no handle_error" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: CounterProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{"error" => %{"type" => "GENERIC", "message" => "Something failed"}}
+        ])
+
+      {:ok, same_state} = Socket.handle_in({json, [opcode: :text]}, state)
+      assert same_state.provider_state == state.provider_state
+    end
+
+    test "handles mixed action and error messages" do
+      {:push, _frames, state} =
+        Socket.init(%{provider: ErrorProvider, opts: %{}})
+
+      json =
+        Jason.encode!([
+          %{"error" => %{"type" => "VALIDATION_FAILED", "path" => "/x"}}
+        ])
+
+      {:ok, new_state} = Socket.handle_in({json, [opcode: :text]}, state)
+      assert length(new_state.provider_state.errors) == 1
     end
   end
 end
