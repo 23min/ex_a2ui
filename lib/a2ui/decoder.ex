@@ -52,6 +52,10 @@ defmodule A2UI.Decoder do
     decode_action(payload)
   end
 
+  defp decode_message(%{"error" => payload}) do
+    decode_error(payload)
+  end
+
   defp decode_message(other) do
     {:error, {:unknown_message, other}}
   end
@@ -85,4 +89,20 @@ defmodule A2UI.Decoder do
 
   defp decode_context(nil), do: nil
   defp decode_context(ctx) when is_map(ctx), do: ctx
+
+  defp decode_error(%{"type" => type} = payload) do
+    error = %A2UI.Error{
+      type: type,
+      path: Map.get(payload, "path"),
+      message: Map.get(payload, "message")
+    }
+
+    metadata = %{
+      surface_id: Map.get(payload, "surfaceId")
+    }
+
+    {:ok, {:error, error, metadata}}
+  end
+
+  defp decode_error(other), do: {:error, {:invalid_error, other}}
 end

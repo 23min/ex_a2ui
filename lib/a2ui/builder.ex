@@ -53,6 +53,11 @@ defmodule A2UI.Builder do
     %{s | send_data_model: flag}
   end
 
+  @doc "Sets the catalog ID on the surface."
+  @spec catalog_id(Surface.t(), String.t() | A2UI.Catalog.t()) :: Surface.t()
+  def catalog_id(%Surface{} = s, %A2UI.Catalog{id: id}), do: %{s | catalog_id: id}
+  def catalog_id(%Surface{} = s, id) when is_binary(id), do: %{s | catalog_id: id}
+
   # --- Display components ---
 
   @doc """
@@ -328,6 +333,43 @@ defmodule A2UI.Builder do
   @doc "Creates an `openUrl` FunctionCall for use as a dynamic value."
   @spec open_url(String.t()) :: FunctionCall.t()
   def open_url(url), do: FunctionCall.open_url(url)
+
+  @doc "Creates a `numeric` validation FunctionCall."
+  @spec numeric(term()) :: FunctionCall.t()
+  def numeric(value_ref), do: FunctionCall.numeric(value_ref)
+
+  @doc "Creates an `email` validation FunctionCall."
+  @spec email(term()) :: FunctionCall.t()
+  def email(value_ref), do: FunctionCall.email(value_ref)
+
+  @doc "Creates a `formatNumber` FunctionCall."
+  @spec format_number(term()) :: FunctionCall.t()
+  def format_number(value_ref), do: FunctionCall.format_number(value_ref)
+
+  @doc "Creates a `formatCurrency` FunctionCall."
+  @spec format_currency(term(), String.t()) :: FunctionCall.t()
+  def format_currency(value_ref, currency_code),
+    do: FunctionCall.format_currency(value_ref, currency_code)
+
+  @doc "Creates a `formatDate` FunctionCall."
+  @spec format_date(term(), String.t()) :: FunctionCall.t()
+  def format_date(value_ref, format), do: FunctionCall.format_date(value_ref, format)
+
+  @doc "Creates a `pluralize` FunctionCall."
+  @spec pluralize(term(), term(), term()) :: FunctionCall.t()
+  def pluralize(count, singular, plural), do: FunctionCall.pluralize(count, singular, plural)
+
+  @doc "Creates an `and` logic FunctionCall."
+  @spec fn_and(list()) :: FunctionCall.t()
+  def fn_and(conditions), do: FunctionCall.fn_and(conditions)
+
+  @doc "Creates an `or` logic FunctionCall."
+  @spec fn_or(list()) :: FunctionCall.t()
+  def fn_or(conditions), do: FunctionCall.fn_or(conditions)
+
+  @doc "Creates a `not` logic FunctionCall."
+  @spec fn_not(term()) :: FunctionCall.t()
+  def fn_not(condition), do: FunctionCall.fn_not(condition)
 
   # --- TemplateChildList helpers ---
 

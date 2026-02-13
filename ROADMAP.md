@@ -143,53 +143,13 @@ v0.9-compliant JSON wire format. Breaking changes to encoder/decoder output. 100
 
 **Struct/type changes:** Added `:audio_player`, renamed `:multiple_choice` → `:choice_picker` (18 standard types). Surface gained `catalog_id` field. `encode_surface/1` returns single JSON string (was list of strings).
 
-### v0.4.0 — v0.9 Data Features
+### v0.4.0 — v0.9 Data Features ✅
 
-**FunctionCall:**
-- New struct for computed values: `{"call": "fn", "args": {...}, "returnType": "string"}`
-- Server emits FunctionCall in component properties; clients evaluate them
-- Builder helpers for common patterns (e.g., `UI.format_string(...)`, `UI.open_url(...)`)
+FunctionCall, TemplateChildList, CheckRule, Theme, sendDataModel, path-level data operations. Builder helpers for all new types. 162 tests.
 
-**Template ChildList:**
-- Dynamic children from data arrays: `{"path": "/items", "componentId": "template"}`
-- Enables data-driven lists without manually creating per-item components
+### v0.5.0 — Protocol Completeness & Transport Options ✅
 
-**CheckRule / validation:**
-- `checks` array on input components: `{"condition": <DynamicBoolean>, "message": "..."}`
-- Builder helpers: `UI.text_field("name", "Name", checks: [required(), max_length(50)])`
-
-**updateDataModel path operations:**
-- Path-level upsert: set value at a specific JSON Pointer path
-- Path-level delete: omit `value` to delete at path
-- Replaces current bulk data map approach
-
-**Theme:**
-- `primaryColor`, `iconUrl`, `agentDisplayName` on createSurface
-- Surface struct gains theme fields
-
-**sendDataModel flag:**
-- On createSurface, tells client to send full data model back with actions
-
-### v0.5.0 — Protocol Completeness & Transport Options
-
-**Client error messages:**
-- Decode `error` messages from client (`VALIDATION_FAILED` with path, generic errors)
-- Route to provider via new callback or handle_action extension
-
-**Standard functions (14):**
-- Constants/types for: required, regex, length, numeric, email, formatString, formatNumber, formatCurrency, formatDate, pluralize, and, or, not, openUrl
-- Builder helpers for constructing FunctionCall values with the right args/returnType
-- No evaluation engine (that's the client's job)
-
-**Transport options:**
-- SSE (Server-Sent Events) adapter — for one-way push scenarios (dashboards, monitoring)
-- HTTP streaming adapter — for request-response with streamed UI
-- WebSocket remains the default for bidirectional communication
-- Encoder is already transport-independent; adapters handle framing
-
-**Custom component registration:**
-- `A2UI.Catalog` — register custom component types with metadata
-- Wire format for catalog exchange
+All 14 standard function helpers. Client error messages with `handle_error/2` callback. SSE transport adapter. Custom component catalog with validation. 220 tests.
 
 ### v0.6.0 — Demo Parity & Production Hardening
 
@@ -217,7 +177,7 @@ v0.9-compliant JSON wire format. Breaking changes to encoder/decoder output. 100
 
 ## Dependencies
 
-### Current (v0.3.0)
+### Current (v0.5.0)
 
 ```elixir
 {:jason, "~> 1.4"}            # JSON encoding/decoding

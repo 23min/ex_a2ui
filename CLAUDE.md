@@ -39,18 +39,26 @@ mix run demo_server.exs   # runnable demo (http://localhost:4000)
 - `A2UI.Surface` — flat component list + data model
 - `A2UI.BoundValue` — literal/path data binding (v0.9 Dynamic Values)
 - `A2UI.Action` — user interaction events
+- `A2UI.FunctionCall` — computed dynamic values (client-evaluated)
+- `A2UI.TemplateChildList` — data-driven children from data arrays
+- `A2UI.CheckRule` — input validation rules
+- `A2UI.Theme` — surface theming (primaryColor, iconUrl, agentDisplayName)
 - `A2UI.Encoder` — structs → v0.9 JSON wire format (array-wrapped, versioned)
-- `A2UI.Decoder` — incoming v0.9 action JSON → structs
+- `A2UI.Error` — client error message struct
+- `A2UI.Catalog` — custom component type registry and validation
+- `A2UI.Encoder` — structs → v0.9 JSON wire format (array-wrapped, versioned)
+- `A2UI.Decoder` — incoming v0.9 action/error JSON → structs
 - `A2UI.Builder` — pipe-friendly convenience API
 - `A2UI.Server` — starts WebSocket server (Bandit), push API
 - `A2UI.Socket` — WebSock handler, bridges WS to SurfaceProvider
-- `A2UI.Endpoint` — Plug endpoint (HTTP + WS routing)
-- `A2UI.SurfaceProvider` — behaviour: `init/1`, `surface/1`, `handle_action/2`, optional `handle_info/2`
+- `A2UI.SSE` — Server-Sent Events transport adapter (push-only)
+- `A2UI.Endpoint` — Plug endpoint (HTTP + WS + SSE routing)
+- `A2UI.SurfaceProvider` — behaviour: `init/1`, `surface/1`, `handle_action/2`, optional `handle_info/2`, `handle_error/2`
 - `A2UI.Supervisor` — OTP Supervisor (Registry + Bandit)
 
 ## Current State
 
-**v0.3.0** — v0.9 wire format, push updates, WebSocket server. 100 tests. Published on [Hex.pm](https://hex.pm/packages/ex_a2ui).
+**v0.5.0** — protocol completeness (all 14 standard functions, client errors, SSE transport, catalog). 220 tests.
 
 ## Pre-commit Hook
 
