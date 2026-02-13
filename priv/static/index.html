@@ -106,6 +106,77 @@
       border-top: 1px solid rgba(255,255,255,0.1);
       margin: 0.5rem 0;
     }
+    .a2ui-text-field {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text);
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.3rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      width: 100%;
+      max-width: 300px;
+    }
+    .a2ui-text-field:focus { border-color: var(--accent); }
+    .a2ui-text-field::placeholder { color: var(--muted); }
+    .a2ui-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      max-width: 200px;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      outline: none;
+    }
+    .a2ui-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .a2ui-select {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text);
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.3rem;
+      font-size: 0.9rem;
+      font-family: inherit;
+    }
+    .a2ui-image { max-width: 100%; border-radius: 0.3rem; }
+    .a2ui-icon { font-size: 0.85rem; color: var(--muted); font-family: var(--mono); }
+    .a2ui-video, .a2ui-audio { max-width: 100%; border-radius: 0.3rem; }
+    .a2ui-list { display: flex; flex-direction: column; gap: 0.25rem; }
+    .a2ui-tabs-header {
+      display: flex; gap: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 0.75rem;
+    }
+    .a2ui-tab-btn {
+      background: none; border: none;
+      color: var(--muted);
+      padding: 0.4rem 0.8rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-family: inherit;
+    }
+    .a2ui-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .a2ui-modal-overlay {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 0.5rem;
+      padding: 1rem;
+    }
+    .a2ui-modal-title {
+      font-size: 0.9rem; font-weight: 600;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
     .a2ui-unknown {
       font-family: var(--mono);
       font-size: 0.75rem;
@@ -180,7 +251,8 @@
       let ws;
 
       function connect() {
-        const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+        const params = location.search || '';
+        const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws' + params;
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
@@ -341,6 +413,148 @@
             col.className = 'a2ui-column';
             renderChildren(col, comp.children);
             parent.appendChild(col);
+            break;
+          }
+          case 'TextField': {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'a2ui-text-field';
+            if (comp.placeholder) input.placeholder = resolveValue(comp.placeholder);
+            if (comp.value) input.value = resolveValue(comp.value);
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              input.onchange = () => sendAction(event.name, event.context);
+            }
+            parent.appendChild(input);
+            break;
+          }
+          case 'Slider': {
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.className = 'a2ui-slider';
+            if (comp.min !== undefined) input.min = resolveValue(comp.min);
+            if (comp.max !== undefined) input.max = resolveValue(comp.max);
+            if (comp.value) input.value = resolveValue(comp.value);
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              input.oninput = () => sendAction(event.name, event.context);
+            }
+            parent.appendChild(input);
+            break;
+          }
+          case 'DateTimeInput': {
+            const input = document.createElement('input');
+            input.type = 'datetime-local';
+            input.className = 'a2ui-text-field';
+            if (comp.value) input.value = resolveValue(comp.value);
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              input.onchange = () => sendAction(event.name, event.context);
+            }
+            parent.appendChild(input);
+            break;
+          }
+          case 'ChoicePicker': {
+            const select = document.createElement('select');
+            select.className = 'a2ui-select';
+            if (Array.isArray(comp.options)) {
+              comp.options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value || opt.label || '';
+                option.textContent = opt.label || opt.value || '';
+                select.appendChild(option);
+              });
+            }
+            if (comp.value) select.value = resolveValue(comp.value);
+            if (comp.action && comp.action.event) {
+              const event = comp.action.event;
+              select.onchange = () => sendAction(event.name, event.context);
+            }
+            parent.appendChild(select);
+            break;
+          }
+          case 'Image': {
+            const img = document.createElement('img');
+            img.className = 'a2ui-image';
+            img.src = resolveValue(comp.src);
+            if (comp.alt) img.alt = resolveValue(comp.alt);
+            parent.appendChild(img);
+            break;
+          }
+          case 'Icon': {
+            const span = document.createElement('span');
+            span.className = 'a2ui-icon';
+            span.textContent = resolveValue(comp.icon);
+            parent.appendChild(span);
+            break;
+          }
+          case 'Video': {
+            const video = document.createElement('video');
+            video.className = 'a2ui-video';
+            video.controls = true;
+            video.src = resolveValue(comp.src);
+            parent.appendChild(video);
+            break;
+          }
+          case 'AudioPlayer': {
+            const audio = document.createElement('audio');
+            audio.className = 'a2ui-audio';
+            audio.controls = true;
+            audio.src = resolveValue(comp.src);
+            parent.appendChild(audio);
+            break;
+          }
+          case 'List': {
+            const list = document.createElement('div');
+            list.className = 'a2ui-list';
+            renderChildren(list, comp.children);
+            parent.appendChild(list);
+            break;
+          }
+          case 'Tabs': {
+            const tabs = document.createElement('div');
+            const header = document.createElement('div');
+            header.className = 'a2ui-tabs-header';
+            const body = document.createElement('div');
+            if (comp.title) {
+              const title = document.createElement('div');
+              title.className = 'a2ui-card-title';
+              title.textContent = resolveValue(comp.title);
+              tabs.appendChild(title);
+            }
+            const childIds = Array.isArray(comp.children) ? comp.children : [];
+            childIds.forEach((cid, i) => {
+              const btn = document.createElement('button');
+              btn.className = 'a2ui-tab-btn' + (i === 0 ? ' active' : '');
+              btn.textContent = cid;
+              btn.onclick = () => {
+                header.querySelectorAll('.a2ui-tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                body.innerHTML = '';
+                renderComponent(body, cid);
+              };
+              header.appendChild(btn);
+            });
+            tabs.appendChild(header);
+            if (childIds.length > 0) renderComponent(body, childIds[0]);
+            tabs.appendChild(body);
+            parent.appendChild(tabs);
+            break;
+          }
+          case 'Modal': {
+            const modal = document.createElement('div');
+            modal.className = 'a2ui-modal-overlay';
+            if (comp.title) {
+              const title = document.createElement('div');
+              title.className = 'a2ui-modal-title';
+              title.textContent = resolveValue(comp.title);
+              modal.appendChild(title);
+            }
+            const modalBody = document.createElement('div');
+            modalBody.className = 'a2ui-column';
+            renderChildren(modalBody, comp.children);
+            modal.appendChild(modalBody);
+            parent.appendChild(modal);
             break;
           }
           case 'Divider': {

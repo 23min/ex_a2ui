@@ -56,6 +56,11 @@ defmodule A2UI.SSE do
           Registry.register(registry, :__all__, %{})
         end
 
+        :telemetry.execute([:a2ui, :sse, :init], %{}, %{
+          provider: provider,
+          surface_id: surface.id
+        })
+
         # Send initial surface
         json = A2UI.Encoder.encode_surface(surface)
         {:ok, conn} = send_sse_event(conn, json)
@@ -72,6 +77,7 @@ defmodule A2UI.SSE do
 
   @doc false
   def send_sse_event(conn, data) do
+    :telemetry.execute([:a2ui, :sse, :event], %{size: byte_size(data)}, %{})
     chunk(conn, "event: a2ui\ndata: #{data}\n\n")
   end
 
@@ -113,28 +119,34 @@ defmodule A2UI.SSE do
 
   defp handle_provider_message(provider, msg, provider_state, _surface_id) do
     if function_exported?(provider, :handle_info, 2) do
-      case provider.handle_info(msg, provider_state) do
-        {:noreply, new_state} ->
-          {:noreply, new_state}
+      try do
+        case provider.handle_info(msg, provider_state) do
+          {:noreply, new_state} ->
+            {:noreply, new_state}
 
-        {:push_data, sid, data, new_state} ->
-          json = A2UI.Encoder.update_data_model(sid, data)
-          {:send, json, new_state}
+          {:push_data, sid, data, new_state} ->
+            json = A2UI.Encoder.update_data_model(sid, data)
+            {:send, json, new_state}
 
-        {:push_surface, %A2UI.Surface{} = surface, new_state} ->
-          json = A2UI.Encoder.encode_surface(surface)
-          {:send, json, new_state}
+          {:push_surface, %A2UI.Surface{} = surface, new_state} ->
+            json = A2UI.Encoder.encode_surface(surface)
+            {:send, json, new_state}
 
-        {:push_data_path, sid, path, value, new_state} ->
-          json = A2UI.Encoder.update_data_model_path(sid, path, value)
-          {:send, json, new_state}
+          {:push_data_path, sid, path, value, new_state} ->
+            json = A2UI.Encoder.update_data_model_path(sid, path, value)
+            {:send, json, new_state}
 
-        {:delete_data_path, sid, path, new_state} ->
-          json = A2UI.Encoder.delete_data_model_path(sid, path)
-          {:send, json, new_state}
+          {:delete_data_path, sid, path, new_state} ->
+            json = A2UI.Encoder.delete_data_model_path(sid, path)
+            {:send, json, new_state}
 
-        other ->
-          Logger.warning("A2UI.SSE: invalid handle_info return: #{inspect(other)}")
+          other ->
+            Logger.warning("A2UI.SSE: invalid handle_info return: #{inspect(other)}")
+            :ignore
+        end
+      rescue
+        e ->
+          Logger.error("A2UI.SSE: provider.handle_info crashed: #{Exception.message(e)}")
           :ignore
       end
     else

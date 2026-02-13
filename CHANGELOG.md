@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 This project follows [Semantic Versioning](https://semver.org/) and uses
 [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [0.6.0] - 2026-02-12
+
+### Added
+
+- **Complete Builder helpers** — all 18 standard component types now have Builder helpers: `date_time_input/3`, `choice_picker/3`, `icon/3`, `video/3`, `audio_player/3`, `list/3`, `tabs/3` (was 11, now 18)
+- **Complete debug renderer** — all 18 standard component types render in `priv/static/index.html` (was 7): TextField, Slider, DateTimeInput, ChoicePicker, Image, Icon, Video, AudioPlayer, List, Tabs, Modal
+- **Telemetry instrumentation** — `[:a2ui, :socket, :init]`, `[:a2ui, :socket, :action]`, `[:a2ui, :socket, :terminate]` events in Socket; `[:a2ui, :sse, :init]`, `[:a2ui, :sse, :event]` in SSE
+- **Graceful error handling** — provider crashes in `handle_action/2`, `handle_info/2`, and `handle_error/2` are caught and logged instead of crashing the socket process
+- **5 demo providers** — Component Gallery, Data Binding, Form Validation, Push Streaming, Custom Component (in `demo/` directory)
+- **Query param routing** — `?demo=gallery|binding|form|push|custom` selects demo provider
+- Debug renderer forwards query params to WebSocket URL for demo selection
+
+### Changed
+
+- `A2UI.Endpoint` now passes query params in provider_opts for both WS and SSE routes
+- `demo_server.exs` rewritten with DemoRouter that delegates to demo providers
+- 232 tests (was 220)
+
 ## [0.5.0] - 2026-02-12
 
 ### Added
@@ -131,6 +149,7 @@ This project follows [Semantic Versioning](https://semver.org/) and uses
 - Runnable demo (`mix run demo.exs`)
 - 43 tests
 
+[0.6.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.6.0
 [0.5.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.5.0
 [0.4.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.4.0
 [0.3.0]: https://github.com/23min/ex_a2ui/releases/tag/v0.3.0

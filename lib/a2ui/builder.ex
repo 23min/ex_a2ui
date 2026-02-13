@@ -107,6 +107,61 @@ defmodule A2UI.Builder do
     add(s, id, :image, props)
   end
 
+  @doc """
+  Adds an Icon component.
+
+  ## Options
+
+  - `bind:` — data model path for the icon name
+  """
+  @spec icon(Surface.t(), String.t(), String.t() | keyword()) :: Surface.t()
+  def icon(%Surface{} = s, id, name) when is_binary(name) do
+    add(s, id, :icon, %{icon: BoundValue.literal(name)})
+  end
+
+  def icon(%Surface{} = s, id, opts) when is_list(opts) do
+    value = resolve_bound_value(opts[:bind], opts[:icon])
+    add(s, id, :icon, %{icon: value})
+  end
+
+  @doc """
+  Adds a Video component.
+
+  ## Options
+
+  - `bind:` — data model path for the video source
+  - `alt:` — alt text
+  """
+  @spec video(Surface.t(), String.t(), String.t() | keyword()) :: Surface.t()
+  def video(%Surface{} = s, id, src) when is_binary(src) do
+    add(s, id, :video, %{src: BoundValue.literal(src)})
+  end
+
+  def video(%Surface{} = s, id, opts) when is_list(opts) do
+    props =
+      %{src: resolve_bound_value(opts[:bind], opts[:src])}
+      |> maybe_put(:alt, opts[:alt])
+
+    add(s, id, :video, props)
+  end
+
+  @doc """
+  Adds an AudioPlayer component.
+
+  ## Options
+
+  - `bind:` — data model path for the audio source
+  """
+  @spec audio_player(Surface.t(), String.t(), String.t() | keyword()) :: Surface.t()
+  def audio_player(%Surface{} = s, id, src) when is_binary(src) do
+    add(s, id, :audio_player, %{src: BoundValue.literal(src)})
+  end
+
+  def audio_player(%Surface{} = s, id, opts) when is_list(opts) do
+    props = %{src: resolve_bound_value(opts[:bind], opts[:src])}
+    add(s, id, :audio_player, props)
+  end
+
   @doc "Adds a Divider component."
   @spec divider(Surface.t(), String.t()) :: Surface.t()
   def divider(%Surface{} = s, id), do: add(s, id, :divider, %{})
@@ -202,6 +257,69 @@ defmodule A2UI.Builder do
     props = maybe_put(props, :checks, opts[:checks])
 
     add(s, id, :checkbox, props)
+  end
+
+  @doc """
+  Adds a DateTimeInput component.
+
+  ## Options
+
+  - `bind:` — data model path for the value
+  - `action:` — action name triggered on change
+  - `checks:` — list of `CheckRule` validation rules
+  """
+  @spec date_time_input(Surface.t(), String.t(), keyword()) :: Surface.t()
+  def date_time_input(%Surface{} = s, id, opts \\ []) do
+    props = %{}
+
+    props =
+      case opts[:bind] do
+        nil -> props
+        path -> Map.put(props, :value, BoundValue.bind(path))
+      end
+
+    props =
+      case opts[:action] do
+        nil -> props
+        name -> Map.put(props, :action, Action.new(name))
+      end
+
+    props = maybe_put(props, :checks, opts[:checks])
+
+    add(s, id, :date_time_input, props)
+  end
+
+  @doc """
+  Adds a ChoicePicker component.
+
+  ## Options
+
+  - `options:` — list of choice options (maps with label/value)
+  - `bind:` — data model path for the selected value
+  - `action:` — action name triggered on selection
+  - `checks:` — list of `CheckRule` validation rules
+  """
+  @spec choice_picker(Surface.t(), String.t(), keyword()) :: Surface.t()
+  def choice_picker(%Surface{} = s, id, opts \\ []) do
+    props = %{}
+
+    props =
+      case opts[:bind] do
+        nil -> props
+        path -> Map.put(props, :value, BoundValue.bind(path))
+      end
+
+    props = maybe_put(props, :options, opts[:options])
+
+    props =
+      case opts[:action] do
+        nil -> props
+        name -> Map.put(props, :action, Action.new(name))
+      end
+
+    props = maybe_put(props, :checks, opts[:checks])
+
+    add(s, id, :choice_picker, props)
   end
 
   @doc """
@@ -303,6 +421,36 @@ defmodule A2UI.Builder do
     props = maybe_put_children(props, opts[:children])
     props = maybe_put_literal(props, :title, opts[:title])
     add(s, id, :modal, props)
+  end
+
+  @doc """
+  Adds a List component (scrollable list with item template).
+
+  ## Options
+
+  - `children:` — list of child component IDs or a `TemplateChildList`
+  """
+  @spec list(Surface.t(), String.t(), keyword()) :: Surface.t()
+  def list(%Surface{} = s, id, opts \\ []) do
+    props = %{}
+    props = maybe_put_children(props, opts[:children])
+    add(s, id, :list, props)
+  end
+
+  @doc """
+  Adds a Tabs component (tabbed sections).
+
+  ## Options
+
+  - `children:` — list of child component IDs or a `TemplateChildList`
+  - `title:` — tabs title
+  """
+  @spec tabs(Surface.t(), String.t(), keyword()) :: Surface.t()
+  def tabs(%Surface{} = s, id, opts \\ []) do
+    props = %{}
+    props = maybe_put_children(props, opts[:children])
+    props = maybe_put_literal(props, :title, opts[:title])
+    add(s, id, :tabs, props)
   end
 
   # --- Custom components ---

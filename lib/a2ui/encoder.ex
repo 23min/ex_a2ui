@@ -295,6 +295,12 @@ defmodule A2UI.Encoder do
     Enum.map(list, &encode_property_value/1)
   end
 
+  defp encode_property_value(value) when is_map(value) do
+    Map.new(value, fn {key, val} ->
+      {encode_property_key(key), encode_property_value(val)}
+    end)
+  end
+
   defp encode_property_value(value) when is_binary(value), do: value
   defp encode_property_value(value) when is_number(value), do: value
   defp encode_property_value(value) when is_boolean(value), do: value

@@ -1,61 +1,93 @@
-defmodule DemoProvider do
+# Load demo providers
+for file <- Path.wildcard("demo/*.ex") do
+  Code.require_file(file)
+end
+
+defmodule DemoRouter do
   @behaviour A2UI.SurfaceProvider
 
-  alias A2UI.Builder, as: UI
+  @demos %{
+    "gallery" => Demo.ComponentGallery,
+    "binding" => Demo.DataBinding,
+    "form" => Demo.FormValidation,
+    "push" => Demo.PushStreaming,
+    "custom" => Demo.CustomComponent
+  }
 
   @impl true
-  def init(_opts) do
-    # Start a 1-second timer for push updates
-    Process.send_after(self(), :tick, 1000)
-    {:ok, %{count: 0, health: "operational", uptime: 0}}
+  def init(opts) do
+    demo = get_in(opts, [:query_params, "demo"]) || "gallery"
+    provider = Map.get(@demos, demo, Demo.ComponentGallery)
+
+    case provider.init(opts) do
+      {:ok, state} -> {:ok, %{provider: provider, inner: state}}
+      error -> error
+    end
   end
 
   @impl true
-  def surface(state) do
-    UI.surface("demo")
-    |> UI.text("title", "A2UI Demo")
-    |> UI.text("count-label", "Counter:")
-    |> UI.text("count-val", "#{state.count}")
-    |> UI.text("health-label", "Health:")
-    |> UI.text("health-val", state.health)
-    |> UI.text("uptime-label", "Uptime:")
-    |> UI.text("uptime-val", "#{state.uptime}s")
-    |> UI.button("inc", "Increment", action: "increment")
-    |> UI.button("reset", "Reset", action: "reset")
-    |> UI.row("count-row", children: ["count-label", "count-val"])
-    |> UI.row("health-row", children: ["health-label", "health-val"])
-    |> UI.row("uptime-row", children: ["uptime-label", "uptime-val"])
-    |> UI.row("actions", children: ["inc", "reset"])
-    |> UI.column("body", children: ["count-row", "health-row", "uptime-row", "actions"])
-    |> UI.card("main", children: ["title", "body"], title: "Dashboard")
-    |> UI.root("main")
+  def surface(%{provider: provider, inner: state}) do
+    provider.surface(state)
   end
 
   @impl true
-  def handle_action(%A2UI.Action{name: "increment"}, state) do
-    new = %{state | count: state.count + 1}
-    {:reply, surface(new), new}
+  def handle_action(action, %{provider: provider, inner: state} = wrapper) do
+    case provider.handle_action(action, state) do
+      {:noreply, new_state} -> {:noreply, %{wrapper | inner: new_state}}
+      {:reply, surface, new_state} -> {:reply, surface, %{wrapper | inner: new_state}}
+    end
   end
-
-  def handle_action(%A2UI.Action{name: "reset"}, state) do
-    new = %{state | count: 0}
-    {:reply, surface(new), new}
-  end
-
-  def handle_action(_, state), do: {:noreply, state}
 
   @impl true
-  def handle_info(:tick, state) do
-    Process.send_after(self(), :tick, 1000)
-    new = %{state | uptime: state.uptime + 1}
-    {:push_surface, surface(new), new}
+  def handle_info(msg, %{provider: provider, inner: state} = wrapper) do
+    if function_exported?(provider, :handle_info, 2) do
+      case provider.handle_info(msg, state) do
+        {:noreply, new_state} ->
+          {:noreply, %{wrapper | inner: new_state}}
+
+        {:push_data, sid, data, new_state} ->
+          {:push_data, sid, data, %{wrapper | inner: new_state}}
+
+        {:push_surface, surface, new_state} ->
+          {:push_surface, surface, %{wrapper | inner: new_state}}
+
+        {:push_data_path, sid, path, value, new_state} ->
+          {:push_data_path, sid, path, value, %{wrapper | inner: new_state}}
+
+        {:delete_data_path, sid, path, new_state} ->
+          {:delete_data_path, sid, path, %{wrapper | inner: new_state}}
+      end
+    else
+      {:noreply, wrapper}
+    end
+  end
+
+  @impl true
+  def handle_error(error, %{provider: provider, inner: state} = wrapper) do
+    if function_exported?(provider, :handle_error, 2) do
+      case provider.handle_error(error, state) do
+        {:noreply, new_state} -> {:noreply, %{wrapper | inner: new_state}}
+
+        {:push_surface, surface, new_state} ->
+          {:push_surface, surface, %{wrapper | inner: new_state}}
+      end
+    else
+      {:noreply, wrapper}
+    end
   end
 end
 
 IO.puts("Starting A2UI demo server on http://localhost:4000")
-IO.puts("Open in browser to see the debug renderer")
+IO.puts("")
+IO.puts("Available demos:")
+IO.puts("  http://localhost:4000/?demo=gallery  — Component Gallery (default)")
+IO.puts("  http://localhost:4000/?demo=binding  — Data Binding")
+IO.puts("  http://localhost:4000/?demo=form     — Form Validation")
+IO.puts("  http://localhost:4000/?demo=push     — Push Streaming")
+IO.puts("  http://localhost:4000/?demo=custom   — Custom Components")
+IO.puts("")
 IO.puts("Press Ctrl+C to stop\n")
 
-{:ok, _pid} = A2UI.Server.start_link(provider: DemoProvider, port: 4000)
+{:ok, _pid} = A2UI.Server.start_link(provider: DemoRouter, port: 4000)
 
 Process.sleep(:infinity)
