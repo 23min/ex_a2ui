@@ -12,5 +12,8 @@
         "JakeBecker.elixir-ls"
       ]
     }
-  }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/mnt/claude,type=bind,readonly"
+  ]
 }

@@ -2,7 +2,7 @@
 
 Lightweight Elixir library for Google's [A2UI](https://a2ui.org/) protocol. Serve interactive, agent-driven UI surfaces from any BEAM app via declarative JSON over WebSocket — no Phoenix or LiveView required.
 
-**Status:** v0.3.0 — v0.9 wire format, push updates, WebSocket server. See [ROADMAP.md](ROADMAP.md) for the full plan.
+**Status:** v0.6.0 — complete Builder (all 18 types), debug renderer, 5 demo providers, telemetry, graceful error handling. 232 tests. See [ROADMAP.md](ROADMAP.md) for the full plan.
 
 **A2UI spec:** v0.9
 
@@ -36,7 +36,7 @@ A2UI is a protocol where servers produce declarative JSON describing UI, and cli
 ```elixir
 def deps do
   [
-    {:ex_a2ui, "~> 0.3.0"}
+    {:ex_a2ui, "~> 0.6.0"}
   ]
 end
 ```
@@ -94,6 +94,14 @@ mix run demo_server.exs
 # Open http://localhost:4000
 ```
 
+5 demo providers are available via query param:
+
+- `http://localhost:4000/?demo=gallery` — Component Gallery (all 18 types, default)
+- `http://localhost:4000/?demo=binding` — Data Binding (reactive updates)
+- `http://localhost:4000/?demo=form` — Form Validation (CheckRule)
+- `http://localhost:4000/?demo=push` — Push Streaming (live metrics)
+- `http://localhost:4000/?demo=custom` — Custom Components (Catalog)
+
 ## What is A2UI?
 
 A2UI (Agent-to-User Interface) is a Google protocol where AI agents generate interactive UI as declarative JSON. Instead of returning text or HTML, an agent describes UI components (buttons, cards, text fields) and the client renders them natively. User interactions flow back to the agent, creating a bidirectional loop.
@@ -133,8 +141,7 @@ Direct protocol types for advanced use cases:
     %A2UI.Component{
       id: "title",
       type: :text,
-      properties: %{text: %A2UI.BoundValue{literal: "Hello!"}},
-      children: []
+      properties: %{text: %A2UI.BoundValue{literal: "Hello!"}}
     }
   ]
 }
@@ -180,19 +187,32 @@ lib/
   a2ui/
     component.ex           # Component struct + 18 standard types
     surface.ex             # Surface (flat component list + data model)
-    bound_value.ex         # Data binding (literal, path, or both)
+    bound_value.ex         # Data binding (literal or path)
     action.ex              # User interaction events
-    encoder.ex             # Elixir structs → A2UI JSON wire format
-    decoder.ex             # Incoming action JSON → Elixir structs
-    builder.ex             # Pipe-friendly convenience API
-    surface_provider.ex    # Behaviour for defining surfaces and handling actions
-    socket.ex              # WebSock handler (A2UI message flow)
-    endpoint.ex            # Plug endpoint (HTTP + WebSocket routing)
+    function_call.ex       # Client-evaluated computed values (14 standard functions)
+    template_child_list.ex # Data-driven children from data arrays
+    check_rule.ex          # Input validation rules
+    theme.ex               # Surface theming
+    encoder.ex             # Elixir structs → A2UI v0.9 JSON wire format
+    decoder.ex             # Incoming action/error JSON → Elixir structs
+    error.ex               # Client error message struct
+    catalog.ex             # Custom component type registry and validation
+    builder.ex             # Pipe-friendly convenience API (all 18 types)
+    surface_provider.ex    # Behaviour: init, surface, handle_action, handle_info, handle_error
+    socket.ex              # WebSock handler (telemetry + graceful error handling)
+    sse.ex                 # Server-Sent Events transport adapter (push-only)
+    endpoint.ex            # Plug endpoint (HTTP + WS + SSE routing)
     supervisor.ex          # OTP Supervisor (Registry + Bandit)
     server.ex              # OTP supervision tree entry point, push API
 priv/
   static/
-    index.html             # Built-in debug renderer page
+    index.html             # Built-in debug renderer (all 18 component types)
+demo/
+  component_gallery.ex     # All 18 standard types
+  data_binding.ex          # Reactive data binding demo
+  form_validation.ex       # Form with CheckRule validation
+  push_streaming.ex        # Timer-based live metrics
+  custom_component.ex      # Catalog + custom components
 ```
 
 ## Dependencies
@@ -205,7 +225,7 @@ That's it. No Phoenix, no Ecto, no LiveView.
 
 ```bash
 git config core.hooksPath .githooks   # one-time setup
-mix ci                                # format + compile + test (100 tests)
+mix ci                                # format + compile + test (232 tests)
 ```
 
 ## License

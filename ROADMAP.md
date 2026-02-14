@@ -64,18 +64,25 @@ A2UI uses flat adjacency lists instead of nested trees for three reasons:
 
 ```
 lib/a2ui/
-  component.ex         — Component struct + 18 standard types
-  surface.ex           — Surface struct (flat component list + data model)
-  bound_value.ex       — Data binding (literal, path, or both)
-  action.ex            — User action struct
-  encoder.ex           — Elixir structs → A2UI JSON wire format
-  decoder.ex           — Incoming JSON → Elixir structs
-  builder.ex           — Pipe-friendly convenience API
-  server.ex            — Bandit HTTP + WebSocket endpoint, push API
-  socket.ex            — WebSock handler for A2UI message flow
-  endpoint.ex          — Plug endpoint (HTTP + WS routing)
-  surface_provider.ex  — Behaviour for defining surfaces
-  supervisor.ex        — OTP Supervisor (Registry + Bandit)
+  component.ex           — Component struct + 18 standard types
+  surface.ex             — Surface struct (flat component list + data model)
+  bound_value.ex         — Data binding (literal or path)
+  action.ex              — User action struct
+  function_call.ex       — Client-evaluated computed values (14 standard functions)
+  template_child_list.ex — Data-driven children from data arrays
+  check_rule.ex          — Input validation rules
+  theme.ex               — Surface theming
+  encoder.ex             — Elixir structs → A2UI v0.9 JSON wire format
+  decoder.ex             — Incoming action/error JSON → Elixir structs
+  error.ex               — Client error message struct
+  catalog.ex             — Custom component type registry and validation
+  builder.ex             — Pipe-friendly convenience API (all 18 types)
+  server.ex              — Bandit HTTP + WebSocket endpoint, push API
+  socket.ex              — WebSock handler (telemetry + graceful error handling)
+  sse.ex                 — Server-Sent Events transport adapter (push-only)
+  endpoint.ex            — Plug endpoint (HTTP + WS + SSE routing)
+  surface_provider.ex    — Behaviour: init, surface, handle_action, handle_info, handle_error
+  supervisor.ex          — OTP Supervisor (Registry + Bandit)
 ```
 
 ### API layers
