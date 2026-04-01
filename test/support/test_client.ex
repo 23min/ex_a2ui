@@ -349,5 +349,4 @@ defmodule A2UI.TestClient do
     send(client, :disconnect)
     :ok
   end
-
 end
