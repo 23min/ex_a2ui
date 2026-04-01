@@ -15,6 +15,17 @@ defmodule A2UI.Socket do
 
   This module is not used directly by applications. It is configured
   internally by `A2UI.Endpoint`.
+
+  ## Test Client API
+
+  For testing, this module also provides a simple WebSocket test client:
+
+      {:ok, client} = A2UI.Socket.connect("ws://localhost:4001/a2ui/ws?run_id=my-run")
+      {:ok, msg} = A2UI.Socket.receive(client, 2000)
+      A2UI.Socket.send_action(client, %{"action" => "approve", "node_id" => "gate"})
+      A2UI.Socket.disconnect(client)
+
+  Requires `:gun` to be available (listed as a test dependency in ex_a2ui).
   """
 
   @behaviour WebSock
@@ -194,6 +205,8 @@ defmodule A2UI.Socket do
         {:ok, state}
     end
   end
+
+  # Test client helpers moved to A2UI.TestClient (test/support/test_client.ex)
 
   defp handle_provider_error(error, %__MODULE__{provider: provider} = state) do
     if function_exported?(provider, :handle_error, 2) do

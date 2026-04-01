@@ -39,6 +39,7 @@ defmodule A2UI.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
+      {:plug, "~> 1.14"},
       {:bandit, "~> 1.0"},
       {:websock_adapter, "~> 0.5"},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},

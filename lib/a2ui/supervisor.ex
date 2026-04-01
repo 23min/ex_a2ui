@@ -43,4 +43,20 @@ defmodule A2UI.Supervisor do
   def registry_name(provider) when is_atom(provider) do
     Module.concat(A2UI.Registry, provider)
   end
+
+  @doc """
+  Returns `true` if any A2UI supervisor is running in the current node.
+
+  Checks for any registered supervisor with a name starting with `a2ui_sup_`.
+  Used in tests to verify the A2UI endpoint is alive.
+  """
+  @spec running?() :: boolean()
+  def running? do
+    Process.registered()
+    |> Enum.any?(fn name ->
+      name
+      |> Atom.to_string()
+      |> String.starts_with?("a2ui_sup_")
+    end)
+  end
 end
